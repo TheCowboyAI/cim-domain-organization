@@ -1,0 +1,23 @@
+[package]
+name = "cim-domain-organization"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Core dependencies
+cim-core-domain = { path = "../cim-core-domain" }
+uuid = { version = "1.11", features = ["v4", "serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2.0"
+
+# Bevy dependencies (optional)
+bevy_ecs = { version = "0.16", optional = true }
+
+[features]
+default = []
+bevy = ["bevy_ecs"]
+
+[dev-dependencies]
+tokio = { version = "1.42", features = ["full"] }
