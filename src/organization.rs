@@ -6,10 +6,10 @@
 //! - Multiple location associations
 //! - Component-based extensibility
 
-use crate::{
-    entity::{AggregateRoot, Entity, EntityId},
-    errors::{DomainError, DomainResult},
-    component::{Component, ComponentStorage},
+use cim_domain::{
+    AggregateRoot, Entity, EntityId,
+    DomainError, DomainResult,
+    Component, ComponentStorage,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

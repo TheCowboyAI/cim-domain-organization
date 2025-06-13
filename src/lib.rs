@@ -11,7 +11,7 @@ pub mod organization;
 pub use organization::*;
 
 // Import necessary types from cim-core-domain
-use cim_core_domain::{
+use cim_domain::{
     AggregateRoot, Component, DomainError, DomainResult,
     EntityId, Command, CommandHandler, CommandEnvelope, CommandAcknowledgment,
     Query, QueryHandler, DomainEvent,
