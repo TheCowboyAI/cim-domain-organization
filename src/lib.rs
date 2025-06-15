@@ -184,9 +184,9 @@ mod tests {
             OrganizationType::Company,
         );
 
-        assert_eq!(org.name(), "Acme Corp");
-        assert_eq!(org.org_type(), &OrganizationType::Company);
-        assert_eq!(org.status(), &OrganizationStatus::Active);
+        assert_eq!(org.name, "Acme Corp");
+        assert_eq!(org.org_type, OrganizationType::Company);
+        assert_eq!(org.status, OrganizationStatus::Active);
     }
 
     #[test]
@@ -196,14 +196,16 @@ mod tests {
             OrganizationType::Team,
         );
 
-        let member = OrganizationMember {
-            person_id: Uuid::new_v4(),
-            role: OrganizationRole::Member,
-            reports_to: None,
-            joined_at: chrono::Utc::now(),
+        let person_id = Uuid::new_v4();
+        let role = OrganizationRole {
+            role_id: "member".to_string(),
+            title: "Team Member".to_string(),
+            level: RoleLevel::Mid,
+            permissions: std::collections::HashSet::new(),
+            attributes: std::collections::HashMap::new(),
         };
 
-        assert!(org.add_member(member).is_ok());
+        assert!(org.add_member(person_id, role).is_ok());
         assert_eq!(org.members().len(), 1);
     }
 }
