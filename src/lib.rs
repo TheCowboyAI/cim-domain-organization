@@ -90,7 +90,7 @@ impl DomainEvent for OrganizationCreated {
     }
 
     fn subject(&self) -> String {
-        format!("organizations.organization.created.v1")
+        "organizations.organization.created.v1".to_string()
     }
 }
 
@@ -119,7 +119,7 @@ impl DomainEvent for OrganizationMemberAdded {
     }
 
     fn subject(&self) -> String {
-        format!("organizations.organization.member_added.v1")
+        "organizations.organization.member_added.v1".to_string()
     }
 }
 

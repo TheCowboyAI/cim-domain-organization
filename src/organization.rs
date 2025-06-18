@@ -251,7 +251,7 @@ impl Organization {
     pub fn add_member(&mut self, person_id: Uuid, role: OrganizationRole) -> DomainResult<()> {
         // Check if already a member
         if self.members.contains_key(&person_id) {
-            return Err(DomainError::ComponentAlreadyExists(format!("Person {} is already a member", person_id)));
+            return Err(DomainError::ComponentAlreadyExists(format!("Person {person_id} is already a member")));
         }
 
         let member = OrganizationMember {
