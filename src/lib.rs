@@ -1,9 +1,6 @@
-//! Organization domain for CIM
+//! Organization Domain
 //!
-//! This module contains all organization-related domain logic including:
-//! - Organization aggregate and components
-//! - Organization commands and events
-//! - Organization command and query handlers
+//! This domain handles organizational structures, hierarchies, and relationships.
 
 pub mod organization;
 
@@ -12,9 +9,7 @@ pub use organization::*;
 
 // Import necessary types from cim-core-domain
 use cim_domain::{
-    AggregateRoot, Component, DomainError, DomainResult,
-    EntityId, Command, CommandHandler, CommandEnvelope, CommandAcknowledgment,
-    Query, QueryHandler, DomainEvent,
+    EntityId, Command, DomainEvent, Query,
 };
 
 use serde::{Deserialize, Serialize};
