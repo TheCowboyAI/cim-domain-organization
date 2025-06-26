@@ -18,17 +18,21 @@
 
 pub mod aggregate;
 pub mod commands;
+pub mod components;
 pub mod events;
 pub mod handlers;
+pub mod infrastructure;
 pub mod projections;
 pub mod queries;
 pub mod value_objects;
 
 // Re-export main types
-pub use aggregate::*;
+pub use aggregate::{OrganizationAggregate, OrganizationId, OrganizationCommand, OrganizationEvent, OrganizationError};
 pub use commands::*;
+pub use components::*;
 pub use events::*;
-pub use handlers::*;
+pub use handlers::{OrganizationCommandHandler, OrganizationQueryHandler, ComponentCommandHandler};
+pub use infrastructure::{ComponentStore, InMemoryComponentStore};
 pub use projections::*;
 pub use queries::*;
 pub use value_objects::*; 

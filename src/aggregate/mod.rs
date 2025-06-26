@@ -7,6 +7,9 @@ use crate::commands::*;
 use crate::events::*;
 use crate::value_objects::*;
 
+/// Type alias for organization ID
+pub type OrganizationId = Uuid;
+
 /// Organization aggregate root
 #[derive(Debug, Clone)]
 pub struct OrganizationAggregate {
@@ -631,6 +634,17 @@ pub enum OrganizationError {
 
     #[error("Invalid acquisition: {0}")]
     InvalidAcquisition(String),
+}
+
+/// Repository for organizations
+pub struct OrganizationRepository;
+
+impl OrganizationRepository {
+    /// Load an organization by ID
+    pub async fn load(&self, _id: OrganizationId) -> cim_domain::DomainResult<Option<OrganizationAggregate>> {
+        // Implementation would load from event store
+        Ok(None)
+    }
 }
 
 #[cfg(test)]

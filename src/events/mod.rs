@@ -1,5 +1,9 @@
 //! Domain events for the Organization domain
 
+mod component_events;
+
+pub use component_events::{ComponentDataEvent, ContactChanges, AddressChanges, SocialProfileChanges};
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

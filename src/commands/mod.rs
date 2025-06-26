@@ -1,5 +1,9 @@
 //! Commands for the Organization domain
 
+mod component_commands;
+
+pub use component_commands::ComponentCommand;
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
