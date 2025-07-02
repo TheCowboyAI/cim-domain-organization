@@ -146,20 +146,21 @@ impl<RS: ReadModelStore> ProjectionUpdater<RS> {
         Self { read_store }
     }
     
-    /// Update projections based on event
+    /// Handle domain events and update projections
     pub async fn handle_event(&self, event: &OrganizationEvent) -> Result<(), OrganizationError> {
         match event {
             OrganizationEvent::Created(e) => {
                 let view = OrganizationView {
                     organization_id: e.organization_id,
                     name: e.name.clone(),
-                    org_type: e.org_type,
+                    org_type: e.org_type.clone(),
                     status: OrganizationStatus::Active,
                     parent_id: e.parent_id,
                     child_units: vec![],
                     member_count: 0,
                     location_count: 0,
                     primary_location_name: None,
+                    size_category: SizeCategory::Small, // Start as small
                 };
                 self.read_store.update_organization(view).await?;
             }
@@ -176,18 +177,20 @@ impl<RS: ReadModelStore> ProjectionUpdater<RS> {
                 };
                 self.read_store.update_member(e.organization_id, member_view).await?;
                 
-                // Update member count
+                // Update member count and size category
                 if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
                     org.member_count += 1;
+                    org.update_size_category();
                     self.read_store.update_organization(org).await?;
                 }
             }
             OrganizationEvent::MemberRemoved(e) => {
                 self.read_store.remove_member(e.organization_id, e.person_id).await?;
                 
-                // Update member count
+                // Update member count and size category
                 if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
                     org.member_count = org.member_count.saturating_sub(1);
+                    org.update_size_category();
                     self.read_store.update_organization(org).await?;
                 }
             }
@@ -423,11 +426,24 @@ impl<RS: ReadModelStore> OrganizationQueryHandler<RS> {
         // Calculate statistics
         let mut members_by_role = HashMap::new();
         let mut members_by_level = HashMap::new();
+        let mut total_tenure_days = 0u64;
+        let now = chrono::Utc::now();
         
         for member in &members {
             *members_by_role.entry(member.role.title.clone()).or_insert(0) += 1;
             *members_by_level.entry(member.role.level).or_insert(0) += 1;
+            
+            // Calculate tenure in days
+            let tenure_duration = now.signed_duration_since(member.joined_at);
+            total_tenure_days += tenure_duration.num_days().max(0) as u64;
         }
+        
+        // Calculate average tenure
+        let average_tenure_days = if members.is_empty() {
+            0
+        } else {
+            total_tenure_days / members.len() as u64
+        };
         
         // Calculate reporting depth
         let reporting_depth = self.calculate_max_reporting_depth(&members);
@@ -437,7 +453,7 @@ impl<RS: ReadModelStore> OrganizationQueryHandler<RS> {
             total_members: members.len(),
             members_by_role,
             members_by_level,
-            average_tenure_days: 0, // TODO: Calculate from join dates
+            average_tenure_days,
             location_count: org.location_count,
             child_organization_count: org.child_units.len(),
             reporting_depth,
@@ -537,6 +553,7 @@ mod tests {
             member_count: 0,
             location_count: 0,
             primary_location_name: None,
+            size_category: SizeCategory::Small,
         };
         
         store.update_organization(org_view.clone()).await.unwrap();
@@ -567,6 +584,7 @@ mod tests {
             member_count: 0,
             location_count: 0,
             primary_location_name: None,
+            size_category: SizeCategory::Small,
         };
         
         store.update_organization(parent_view).await.unwrap();
@@ -598,6 +616,7 @@ mod tests {
                 member_count: i,
                 location_count: 0,
                 primary_location_name: None,
+                size_category: SizeCategory::Small,
             };
             store.update_organization(org_view).await.unwrap();
         }

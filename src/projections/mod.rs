@@ -26,6 +26,25 @@ pub struct OrganizationView {
     pub location_count: usize,
     /// Primary location name
     pub primary_location_name: Option<String>,
+    /// Size category based on member count
+    pub size_category: SizeCategory,
+}
+
+impl OrganizationView {
+    /// Calculate size category based on member count
+    pub fn calculate_size_category(member_count: usize) -> SizeCategory {
+        match member_count {
+            0..=10 => SizeCategory::Small,
+            11..=50 => SizeCategory::Medium,
+            51..=200 => SizeCategory::Large,
+            _ => SizeCategory::Enterprise,
+        }
+    }
+    
+    /// Update size category based on current member count
+    pub fn update_size_category(&mut self) {
+        self.size_category = Self::calculate_size_category(self.member_count);
+    }
 }
 
 /// Hierarchical organization view
@@ -250,6 +269,7 @@ mod tests {
             member_count: 10,
             location_count: 2,
             primary_location_name: Some("HQ".to_string()),
+            size_category: SizeCategory::Small,
         };
 
         assert_eq!(view.name, "Test Corp");

@@ -19,6 +19,7 @@
 pub mod aggregate;
 pub mod commands;
 pub mod components;
+pub mod cross_domain;
 pub mod events;
 pub mod handlers;
 pub mod infrastructure;
@@ -30,6 +31,7 @@ pub mod value_objects;
 pub use aggregate::{OrganizationAggregate, OrganizationId, OrganizationCommand, OrganizationEvent, OrganizationError};
 pub use commands::*;
 pub use components::*;
+pub use cross_domain::{CrossDomainResolver, CrossDomainIntegrationService, PersonDetails, LocationDetails};
 pub use events::*;
 pub use handlers::{OrganizationCommandHandler, OrganizationQueryHandler, ComponentCommandHandler};
 pub use infrastructure::{ComponentStore, InMemoryComponentStore};
