@@ -1,5 +1,7 @@
 //! Projections and read models for the Organization domain
 
+pub mod views;
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use std::collections::HashMap;

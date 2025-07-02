@@ -66,6 +66,7 @@ pub trait CrossDomainResolver: Send + Sync {
 }
 
 /// In-memory implementation for testing
+#[derive(Clone)]
 pub struct InMemoryCrossDomainResolver {
     persons: Arc<RwLock<HashMap<Uuid, PersonDetails>>>,
     locations: Arc<RwLock<HashMap<Uuid, LocationDetails>>>,
@@ -190,13 +191,11 @@ mod tests {
         let mut members = vec![
             crate::projections::views::MemberView {
                 person_id,
+                organization_id: Uuid::new_v4(),
                 person_name: format!("Person {}", person_id),
-                role: crate::value_objects::OrganizationRole::software_engineer(),
-                reports_to_id: None,
-                reports_to_name: None,
-                joined_at: chrono::Utc::now(),
-                direct_reports_count: 0,
-                is_active: true,
+                role: "Software Engineer".to_string(),
+                joined_date: chrono::Utc::now(),
+                tenure_days: 0,
             }
         ];
         
@@ -223,14 +222,14 @@ mod tests {
         
         // Create organization view
         let mut org = crate::projections::views::OrganizationView {
-            organization_id: Uuid::new_v4(),
+            id: Uuid::new_v4(),
             name: "Test Corp".to_string(),
-            org_type: crate::value_objects::OrganizationType::Company,
-            status: crate::value_objects::OrganizationStatus::Active,
-            parent_id: None,
-            child_units: vec![],
+            category: "Company".to_string(),
+            size: 100,
+            headquarters_location: Some(location_id),
+            founded_date: None,
             member_count: 0,
-            location_count: 1,
+            average_tenure_days: None,
             primary_location_name: None,
         };
         

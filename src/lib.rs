@@ -20,6 +20,7 @@ pub mod aggregate;
 pub mod commands;
 pub mod components;
 pub mod cross_domain;
+pub mod errors;
 pub mod events;
 pub mod handlers;
 pub mod infrastructure;
