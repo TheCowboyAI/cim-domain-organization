@@ -14,6 +14,7 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2.0"
 async-trait = "0.1"
 tokio = { version = "1.42", features = ["sync", "rt"] }
+async-nats = "0.38"
 
 # Bevy dependencies (optional)
 bevy_ecs = { version = "0.16", optional = true }
