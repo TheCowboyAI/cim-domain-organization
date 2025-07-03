@@ -153,7 +153,7 @@ impl<RS: ReadModelStore> ProjectionUpdater<RS> {
                 let view = OrganizationView {
                     organization_id: e.organization_id,
                     name: e.name.clone(),
-                    org_type: e.org_type.clone(),
+                    org_type: e.org_type,
                     status: OrganizationStatus::Active,
                     parent_id: e.parent_id,
                     child_units: vec![],
@@ -170,7 +170,7 @@ impl<RS: ReadModelStore> ProjectionUpdater<RS> {
                     person_name: format!("Person {}", e.member.person_id), // TODO: Get from Person domain
                     role: e.member.role.clone(),
                     reports_to_id: e.member.reports_to,
-                    reports_to_name: e.member.reports_to.map(|id| format!("Person {}", id)),
+                    reports_to_name: e.member.reports_to.map(|id| format!("Person {id}")),
                     joined_at: e.added_at,
                     direct_reports_count: 0, // TODO: Calculate from other members
                     is_active: true,

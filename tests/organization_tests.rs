@@ -1,7 +1,7 @@
 //! Integration tests for the Organization domain
 //!
 //! ## Test Mermaid Diagram
-//! 
+//!
 //! ```mermaid
 //! graph TD
 //!     A[Create Organization] --> B[Add Members]
@@ -42,7 +42,9 @@ fn test_create_organization_complete_flow() {
         primary_location_id: None,
     };
 
-    let events = org.handle_command(OrganizationCommand::Create(create_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::Create(create_cmd))
+        .unwrap();
     assert_eq!(events.len(), 1);
 
     // Apply event
@@ -63,7 +65,7 @@ fn test_organization_member_management() {
     // Add CEO
     let ceo_id = Uuid::new_v4();
     let ceo_role = OrganizationRole::ceo();
-    
+
     let add_ceo_cmd = AddMember {
         organization_id: org_id,
         person_id: ceo_id,
@@ -71,16 +73,18 @@ fn test_organization_member_management() {
         reports_to: None,
     };
 
-    let events = org.handle_command(OrganizationCommand::AddMember(add_ceo_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::AddMember(add_ceo_cmd))
+        .unwrap();
     org.apply_event(&events[0]).unwrap();
-    
+
     assert_eq!(org.members.len(), 1);
     assert!(org.members.get(&ceo_id).is_some());
 
     // Add CTO reporting to CEO
     let cto_id = Uuid::new_v4();
     let cto_role = OrganizationRole::cto();
-    
+
     let add_cto_cmd = AddMember {
         organization_id: org_id,
         person_id: cto_id,
@@ -88,9 +92,11 @@ fn test_organization_member_management() {
         reports_to: Some(ceo_id),
     };
 
-    let events = org.handle_command(OrganizationCommand::AddMember(add_cto_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::AddMember(add_cto_cmd))
+        .unwrap();
     org.apply_event(&events[0]).unwrap();
-    
+
     assert_eq!(org.members.len(), 2);
     let cto = org.members.get(&cto_id).unwrap();
     assert_eq!(cto.reports_to, Some(ceo_id));
@@ -98,7 +104,7 @@ fn test_organization_member_management() {
     // Add Engineering Manager reporting to CTO
     let eng_mgr_id = Uuid::new_v4();
     let eng_mgr_role = OrganizationRole::engineering_manager();
-    
+
     let add_mgr_cmd = AddMember {
         organization_id: org_id,
         person_id: eng_mgr_id,
@@ -106,9 +112,11 @@ fn test_organization_member_management() {
         reports_to: Some(cto_id),
     };
 
-    let events = org.handle_command(OrganizationCommand::AddMember(add_mgr_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::AddMember(add_mgr_cmd))
+        .unwrap();
     org.apply_event(&events[0]).unwrap();
-    
+
     assert_eq!(org.members.len(), 3);
 
     // Test circular reporting prevention
@@ -118,7 +126,9 @@ fn test_organization_member_management() {
         new_manager_id: Some(eng_mgr_id),
     };
 
-    let result = org.handle_command(OrganizationCommand::ChangeReportingRelationship(circular_cmd));
+    let result = org.handle_command(OrganizationCommand::ChangeReportingRelationship(
+        circular_cmd,
+    ));
     assert!(result.is_err());
 }
 
@@ -140,9 +150,11 @@ fn test_organization_hierarchy() {
         child_id: division_id,
     };
 
-    let events = company.handle_command(OrganizationCommand::AddChildOrganization(add_division_cmd)).unwrap();
+    let events = company
+        .handle_command(OrganizationCommand::AddChildOrganization(add_division_cmd))
+        .unwrap();
     company.apply_event(&events[0]).unwrap();
-    
+
     assert!(company.child_units.contains(&division_id));
 
     // Create department under division
@@ -160,9 +172,11 @@ fn test_organization_hierarchy() {
         child_id: dept_id,
     };
 
-    let events = division.handle_command(OrganizationCommand::AddChildOrganization(add_dept_cmd)).unwrap();
+    let events = division
+        .handle_command(OrganizationCommand::AddChildOrganization(add_dept_cmd))
+        .unwrap();
     division.apply_event(&events[0]).unwrap();
-    
+
     assert!(division.child_units.contains(&dept_id));
 
     // Test self-reference prevention
@@ -193,9 +207,11 @@ fn test_organization_locations() {
         make_primary: false, // Should still become primary as first location
     };
 
-    let events = org.handle_command(OrganizationCommand::AddLocation(add_hq_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::AddLocation(add_hq_cmd))
+        .unwrap();
     org.apply_event(&events[0]).unwrap();
-    
+
     assert_eq!(org.locations.len(), 1);
     assert_eq!(org.primary_location_id, Some(hq_location_id));
 
@@ -207,9 +223,11 @@ fn test_organization_locations() {
         make_primary: false,
     };
 
-    let events = org.handle_command(OrganizationCommand::AddLocation(add_branch_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::AddLocation(add_branch_cmd))
+        .unwrap();
     org.apply_event(&events[0]).unwrap();
-    
+
     assert_eq!(org.locations.len(), 2);
     assert_eq!(org.primary_location_id, Some(hq_location_id)); // Primary unchanged
 
@@ -219,9 +237,13 @@ fn test_organization_locations() {
         new_location_id: branch_location_id,
     };
 
-    let events = org.handle_command(OrganizationCommand::ChangePrimaryLocation(change_primary_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::ChangePrimaryLocation(
+            change_primary_cmd,
+        ))
+        .unwrap();
     org.apply_event(&events[0]).unwrap();
-    
+
     assert_eq!(org.primary_location_id, Some(branch_location_id));
 
     // Remove original primary location
@@ -230,11 +252,13 @@ fn test_organization_locations() {
         location_id: hq_location_id,
     };
 
-    let events = org.handle_command(OrganizationCommand::RemoveLocation(remove_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::RemoveLocation(remove_cmd))
+        .unwrap();
     for event in &events {
         org.apply_event(event).unwrap();
     }
-    
+
     assert_eq!(org.locations.len(), 1);
     assert_eq!(org.primary_location_id, Some(branch_location_id));
 }
@@ -247,7 +271,7 @@ fn test_organization_status_transitions() {
         "Status Test Corp".to_string(),
         OrganizationType::Company,
     );
-    
+
     // Initial status is Pending
     assert_eq!(org.status, OrganizationStatus::Pending);
 
@@ -261,7 +285,9 @@ fn test_organization_status_transitions() {
         reason: Some("Temporary closure".to_string()),
     };
 
-    let events = org.handle_command(OrganizationCommand::ChangeStatus(inactive_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::ChangeStatus(inactive_cmd))
+        .unwrap();
     org.apply_event(&events[0]).unwrap();
     assert_eq!(org.status, OrganizationStatus::Inactive);
 
@@ -282,7 +308,9 @@ fn test_organization_status_transitions() {
         reason: Some("Reopening".to_string()),
     };
 
-    let events = org.handle_command(OrganizationCommand::ChangeStatus(reactivate_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::ChangeStatus(reactivate_cmd))
+        .unwrap();
     org.apply_event(&events[0]).unwrap();
     assert_eq!(org.status, OrganizationStatus::Active);
 }
@@ -306,7 +334,9 @@ fn test_organization_dissolution() {
         reports_to: None,
     };
 
-    let events = org.handle_command(OrganizationCommand::AddMember(add_member_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::AddMember(add_member_cmd))
+        .unwrap();
     org.apply_event(&events[0]).unwrap();
 
     // Try to dissolve with child organizations (should fail)
@@ -326,9 +356,11 @@ fn test_organization_dissolution() {
     org.child_units.clear();
 
     // Now dissolution should succeed
-    let events = org.handle_command(OrganizationCommand::Dissolve(dissolve_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::Dissolve(dissolve_cmd))
+        .unwrap();
     org.apply_event(&events[0]).unwrap();
-    
+
     assert_eq!(org.status, OrganizationStatus::Dissolved);
 }
 
@@ -336,7 +368,7 @@ fn test_organization_dissolution() {
 fn test_organization_merger() {
     let source_id = Uuid::new_v4();
     let target_id = Uuid::new_v4();
-    
+
     let mut source_org = OrganizationAggregate::new(
         source_id,
         "Small Startup".to_string(),
@@ -351,9 +383,11 @@ fn test_organization_merger() {
         member_disposition: MemberDisposition::TransferredTo(target_id),
     };
 
-    let events = source_org.handle_command(OrganizationCommand::Merge(merge_cmd)).unwrap();
+    let events = source_org
+        .handle_command(OrganizationCommand::Merge(merge_cmd))
+        .unwrap();
     source_org.apply_event(&events[0]).unwrap();
-    
+
     assert_eq!(source_org.status, OrganizationStatus::Merged);
 
     // Test self-merge prevention
@@ -398,7 +432,7 @@ fn test_member_role_updates() {
     let person_id = Uuid::new_v4();
     let mut junior_role = OrganizationRole::software_engineer();
     junior_role.level = RoleLevel::Junior;
-    
+
     let add_cmd = AddMember {
         organization_id: org_id,
         person_id,
@@ -406,21 +440,25 @@ fn test_member_role_updates() {
         reports_to: None,
     };
 
-    let events = org.handle_command(OrganizationCommand::AddMember(add_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::AddMember(add_cmd))
+        .unwrap();
     org.apply_event(&events[0]).unwrap();
 
     // Promote to senior engineer
     let mut senior_role = OrganizationRole::software_engineer();
     senior_role.level = RoleLevel::Senior;
     senior_role.title = "Senior Software Engineer".to_string();
-    
+
     let update_cmd = UpdateMemberRole {
         organization_id: org_id,
         person_id,
         new_role: senior_role.clone(),
     };
 
-    let events = org.handle_command(OrganizationCommand::UpdateMemberRole(update_cmd)).unwrap();
+    let events = org
+        .handle_command(OrganizationCommand::UpdateMemberRole(update_cmd))
+        .unwrap();
     org.apply_event(&events[0]).unwrap();
 
     let member = org.members.get(&person_id).unwrap();
@@ -434,8 +472,14 @@ fn test_organization_size_categories() {
     assert_eq!(SizeCategory::from_employee_count(25), SizeCategory::Small);
     assert_eq!(SizeCategory::from_employee_count(100), SizeCategory::Medium);
     assert_eq!(SizeCategory::from_employee_count(500), SizeCategory::Large);
-    assert_eq!(SizeCategory::from_employee_count(2500), SizeCategory::Enterprise);
-    assert_eq!(SizeCategory::from_employee_count(10000), SizeCategory::MegaCorp);
+    assert_eq!(
+        SizeCategory::from_employee_count(2500),
+        SizeCategory::Enterprise
+    );
+    assert_eq!(
+        SizeCategory::from_employee_count(10000),
+        SizeCategory::MegaCorp
+    );
 
     let startup = SizeCategory::Startup;
     assert_eq!(startup.typical_management_layers(), 2);
@@ -446,4 +490,4 @@ fn test_organization_size_categories() {
     let (min, max) = enterprise.typical_budget_range();
     assert_eq!(min, 500.0);
     assert_eq!(max, Some(5000.0));
-} 
+}

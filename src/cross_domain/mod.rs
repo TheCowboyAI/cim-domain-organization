@@ -192,7 +192,7 @@ mod tests {
             crate::projections::views::MemberView {
                 person_id,
                 organization_id: Uuid::new_v4(),
-                person_name: format!("Person {}", person_id),
+                person_name: format!("Person {person_id}"),
                 role: "Software Engineer".to_string(),
                 joined_date: chrono::Utc::now(),
                 tenure_days: 0,

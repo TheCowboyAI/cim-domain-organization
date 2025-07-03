@@ -17,6 +17,67 @@ use crate::components::data::{
 };
 use crate::value_objects::{PhoneNumber, Address};
 
+// Parameter structs to reduce function arguments
+#[derive(Debug, Clone)]
+struct AddContactParams {
+    organization_id: OrganizationId,
+    contact_type: ContactType,
+    phone_number: String,
+    extension: Option<String>,
+    department: Option<String>,
+    hours_of_operation: Option<String>,
+    is_primary: bool,
+}
+
+#[derive(Debug, Clone)]
+struct UpdateContactParams {
+    organization_id: OrganizationId,
+    component_id: ComponentInstanceId,
+    phone_number: Option<String>,
+    extension: Option<String>,
+    department: Option<String>,
+    hours_of_operation: Option<String>,
+    is_primary: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+struct AddAddressParams {
+    organization_id: OrganizationId,
+    address_type: AddressType,
+    line1: String,
+    line2: Option<String>,
+    city: String,
+    state_province: Option<String>,
+    postal_code: Option<String>,
+    country: String,
+    is_primary: bool,
+    is_billing_address: bool,
+    is_shipping_address: bool,
+}
+
+#[derive(Debug, Clone)]
+struct AddCertificationParams {
+    organization_id: OrganizationId,
+    certification_type: CertificationType,
+    name: String,
+    issuing_body: String,
+    certification_number: Option<String>,
+    issue_date: chrono::NaiveDate,
+    expiry_date: Option<chrono::NaiveDate>,
+    scope: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct AddPartnershipParams {
+    organization_id: OrganizationId,
+    partner_organization_id: Option<OrganizationId>,
+    partner_name: String,
+    partnership_type: PartnershipType,
+    start_date: chrono::NaiveDate,
+    end_date: Option<chrono::NaiveDate>,
+    description: Option<String>,
+}
+
 /// Handler for component commands
 pub struct ComponentCommandHandler {
     event_store: Arc<dyn EventStore>,
@@ -40,29 +101,69 @@ impl ComponentCommandHandler {
     /// Handle a component command
     pub async fn handle(&self, command: ComponentCommand) -> DomainResult<Vec<ComponentDataEvent>> {
         // Verify organization exists
-        let organization_id = self.get_organization_id(&command)?;
-        let organization = self.organization_repository.load(organization_id).await?;
+        let org_id = self.get_organization_id(&command)?;
+        let org = self.organization_repository.load(org_id).await?;
         
-        if organization.is_none() {
-            return Err(DomainError::AggregateNotFound(format!("Organization {}", organization_id)));
+        if org.is_none() {
+            return Err(DomainError::generic(format!("Organization {org_id} not found")));
         }
         
-        // Process command
         match command {
             ComponentCommand::AddContact { organization_id, contact_type, phone_number, extension, department, hours_of_operation, is_primary } => {
-                self.handle_add_contact(organization_id, contact_type, phone_number, extension, department, hours_of_operation, is_primary).await
+                let params = AddContactParams {
+                    organization_id,
+                    contact_type,
+                    phone_number,
+                    extension,
+                    department,
+                    hours_of_operation,
+                    is_primary,
+                };
+                self.handle_add_contact(params).await
             }
             ComponentCommand::UpdateContact { organization_id, component_id, phone_number, extension, department, hours_of_operation, is_primary } => {
-                self.handle_update_contact(organization_id, component_id, phone_number, extension, department, hours_of_operation, is_primary).await
+                let params = UpdateContactParams {
+                    organization_id,
+                    component_id,
+                    phone_number,
+                    extension,
+                    department,
+                    hours_of_operation,
+                    is_primary,
+                };
+                self.handle_update_contact(params).await
             }
             ComponentCommand::RemoveContact { organization_id, component_id } => {
                 self.handle_remove_contact(organization_id, component_id).await
             }
             ComponentCommand::AddAddress { organization_id, address_type, line1, line2, city, state_province, postal_code, country, is_primary, is_billing_address, is_shipping_address } => {
-                self.handle_add_address(organization_id, address_type, line1, line2, city, state_province, postal_code, country, is_primary, is_billing_address, is_shipping_address).await
+                let params = AddAddressParams {
+                    organization_id,
+                    address_type,
+                    line1,
+                    line2,
+                    city,
+                    state_province,
+                    postal_code,
+                    country,
+                    is_primary,
+                    is_billing_address,
+                    is_shipping_address,
+                };
+                self.handle_add_address(params).await
             }
             ComponentCommand::AddCertification { organization_id, certification_type, name, issuing_body, certification_number, issue_date, expiry_date, scope } => {
-                self.handle_add_certification(organization_id, certification_type, name, issuing_body, certification_number, issue_date, expiry_date, scope).await
+                let params = AddCertificationParams {
+                    organization_id,
+                    certification_type,
+                    name,
+                    issuing_body,
+                    certification_number,
+                    issue_date,
+                    expiry_date,
+                    scope,
+                };
+                self.handle_add_certification(params).await
             }
             ComponentCommand::AddIndustry { organization_id, classification_system, code, description, is_primary } => {
                 self.handle_add_industry(organization_id, classification_system, code, description, is_primary).await
@@ -74,7 +175,16 @@ impl ComponentCommandHandler {
                 self.handle_add_social_profile(organization_id, platform, profile_url, handle, is_verified).await
             }
             ComponentCommand::AddPartnership { organization_id, partner_organization_id, partner_name, partnership_type, start_date, end_date, description } => {
-                self.handle_add_partnership(organization_id, partner_organization_id, partner_name, partnership_type, start_date, end_date, description).await
+                let params = AddPartnershipParams {
+                    organization_id,
+                    partner_organization_id,
+                    partner_name,
+                    partnership_type,
+                    start_date,
+                    end_date,
+                    description,
+                };
+                self.handle_add_partnership(params).await
             }
             _ => Err(DomainError::generic("Component command not yet implemented")),
         }
@@ -107,27 +217,21 @@ impl ComponentCommandHandler {
     
     async fn handle_add_contact(
         &self,
-        organization_id: OrganizationId,
-        contact_type: ContactType,
-        phone_number: String,
-        extension: Option<String>,
-        department: Option<String>,
-        hours_of_operation: Option<String>,
-        is_primary: bool,
+        params: AddContactParams,
     ) -> DomainResult<Vec<ComponentDataEvent>> {
         // Create contact component
-        let phone = PhoneNumber::new(phone_number.clone())
+        let phone = PhoneNumber::new(params.phone_number.clone())
             .map_err(|e| DomainError::ValidationError(e))?;
         let contact_data = ContactComponentData {
-            contact_type,
+            contact_type: params.contact_type,
             phone,
-            extension,
-            department,
-            hours_of_operation,
-            is_primary,
+            extension: params.extension,
+            department: params.department,
+            hours_of_operation: params.hours_of_operation,
+            is_primary: params.is_primary,
         };
         
-        let component = ComponentInstance::new(organization_id, contact_data)?;
+        let component = ComponentInstance::new(params.organization_id, contact_data)?;
         let component_id = component.id;
         
         // Store component
@@ -135,11 +239,11 @@ impl ComponentCommandHandler {
         
         // Create event
         let event = ComponentDataEvent::ContactAdded {
-            organization_id,
+            organization_id: params.organization_id,
             component_id,
-            contact_type,
-            phone_number,
-            is_primary,
+            contact_type: params.contact_type,
+            phone_number: params.phone_number,
+            is_primary: params.is_primary,
             timestamp: Utc::now(),
         };
         
@@ -151,39 +255,33 @@ impl ComponentCommandHandler {
     
     async fn handle_update_contact(
         &self,
-        organization_id: OrganizationId,
-        component_id: ComponentInstanceId,
-        phone_number: Option<String>,
-        extension: Option<String>,
-        department: Option<String>,
-        hours_of_operation: Option<String>,
-        is_primary: Option<bool>,
+        params: UpdateContactParams,
     ) -> DomainResult<Vec<ComponentDataEvent>> {
         // Get existing component
         let existing: Option<ComponentInstance<ContactComponentData>> = 
-            self.component_store.get_component(component_id).await?;
+            self.component_store.get_component(params.component_id).await?;
         
         if existing.is_none() {
-            return Err(DomainError::generic(format!("Contact component {} not found", component_id)));
+            return Err(DomainError::generic(format!("Contact component {} not found", params.component_id)));
         }
         
         let mut component = existing.unwrap();
         
         // Apply changes
-        if let Some(new_phone) = &phone_number {
+        if let Some(new_phone) = &params.phone_number {
             component.data.phone = PhoneNumber::new(new_phone.clone())
                 .map_err(|e| DomainError::ValidationError(e))?;
         }
-        if let Some(ext) = extension.clone() {
+        if let Some(ext) = params.extension.clone() {
             component.data.extension = Some(ext);
         }
-        if let Some(dept) = department.clone() {
+        if let Some(dept) = params.department.clone() {
             component.data.department = Some(dept);
         }
-        if let Some(hours) = hours_of_operation.clone() {
+        if let Some(hours) = params.hours_of_operation.clone() {
             component.data.hours_of_operation = Some(hours);
         }
-        if let Some(primary) = is_primary {
+        if let Some(primary) = params.is_primary {
             component.data.is_primary = primary;
         }
         
@@ -192,14 +290,14 @@ impl ComponentCommandHandler {
         
         // Create event
         let event = ComponentDataEvent::ContactUpdated {
-            organization_id,
-            component_id,
+            organization_id: params.organization_id,
+            component_id: params.component_id,
             changes: crate::events::ContactChanges {
-                phone_number,
-                extension,
-                department,
-                hours_of_operation,
-                is_primary,
+                phone_number: params.phone_number,
+                extension: params.extension,
+                department: params.department,
+                hours_of_operation: params.hours_of_operation,
+                is_primary: params.is_primary,
             },
             timestamp: Utc::now(),
         };
@@ -231,30 +329,20 @@ impl ComponentCommandHandler {
     
     async fn handle_add_address(
         &self,
-        organization_id: OrganizationId,
-        address_type: AddressType,
-        line1: String,
-        line2: Option<String>,
-        city: String,
-        state_province: Option<String>,
-        postal_code: Option<String>,
-        country: String,
-        is_primary: bool,
-        is_billing_address: bool,
-        is_shipping_address: bool,
+        params: AddAddressParams,
     ) -> DomainResult<Vec<ComponentDataEvent>> {
         // Create address component
-        let address = Address::new(line1, line2, city.clone(), state_province, postal_code, country.clone())
+        let address = Address::new(params.line1, params.line2, params.city.clone(), params.state_province, params.postal_code, params.country.clone())
             .map_err(|e| DomainError::ValidationError(e))?;
         let address_data = AddressComponentData {
-            address_type,
+            address_type: params.address_type,
             address,
-            is_primary,
-            is_billing_address,
-            is_shipping_address,
+            is_primary: params.is_primary,
+            is_billing_address: params.is_billing_address,
+            is_shipping_address: params.is_shipping_address,
         };
         
-        let component = ComponentInstance::new(organization_id, address_data)?;
+        let component = ComponentInstance::new(params.organization_id, address_data)?;
         let component_id = component.id;
         
         // Store component
@@ -262,12 +350,12 @@ impl ComponentCommandHandler {
         
         // Create event
         let event = ComponentDataEvent::AddressAdded {
-            organization_id,
+            organization_id: params.organization_id,
             component_id,
-            address_type,
-            city,
-            country,
-            is_primary,
+            address_type: params.address_type,
+            city: params.city,
+            country: params.country,
+            is_primary: params.is_primary,
             timestamp: Utc::now(),
         };
         
@@ -278,28 +366,21 @@ impl ComponentCommandHandler {
     
     async fn handle_add_certification(
         &self,
-        organization_id: OrganizationId,
-        certification_type: CertificationType,
-        name: String,
-        issuing_body: String,
-        certification_number: Option<String>,
-        issue_date: chrono::NaiveDate,
-        expiry_date: Option<chrono::NaiveDate>,
-        scope: Option<String>,
+        params: AddCertificationParams,
     ) -> DomainResult<Vec<ComponentDataEvent>> {
         // Create certification component
         let cert_data = CertificationComponentData {
-            certification_type,
-            name: name.clone(),
-            issuing_body: issuing_body.clone(),
-            certification_number,
-            issue_date,
-            expiry_date,
+            certification_type: params.certification_type,
+            name: params.name.clone(),
+            issuing_body: params.issuing_body.clone(),
+            certification_number: params.certification_number,
+            issue_date: params.issue_date,
+            expiry_date: params.expiry_date,
             status: CertificationStatus::Active,
-            scope,
+            scope: params.scope,
         };
         
-        let component = ComponentInstance::new(organization_id, cert_data)?;
+        let component = ComponentInstance::new(params.organization_id, cert_data)?;
         let component_id = component.id;
         
         // Store component
@@ -307,12 +388,12 @@ impl ComponentCommandHandler {
         
         // Create event
         let event = ComponentDataEvent::CertificationAdded {
-            organization_id,
+            organization_id: params.organization_id,
             component_id,
-            certification_type,
-            name,
-            issuing_body,
-            issue_date,
+            certification_type: params.certification_type,
+            name: params.name,
+            issuing_body: params.issuing_body,
+            issue_date: params.issue_date,
             timestamp: Utc::now(),
         };
         
@@ -437,26 +518,20 @@ impl ComponentCommandHandler {
     
     async fn handle_add_partnership(
         &self,
-        organization_id: OrganizationId,
-        partner_organization_id: Option<OrganizationId>,
-        partner_name: String,
-        partnership_type: PartnershipType,
-        start_date: chrono::NaiveDate,
-        end_date: Option<chrono::NaiveDate>,
-        description: Option<String>,
+        params: AddPartnershipParams,
     ) -> DomainResult<Vec<ComponentDataEvent>> {
         // Create partnership component
         let partnership_data = PartnershipComponentData {
-            partner_organization_id,
-            partner_name: partner_name.clone(),
-            partnership_type,
-            start_date,
-            end_date,
-            is_active: end_date.is_none() || end_date > Some(chrono::Utc::now().date_naive()),
-            description,
+            partner_organization_id: params.partner_organization_id,
+            partner_name: params.partner_name.clone(),
+            partnership_type: params.partnership_type,
+            start_date: params.start_date,
+            end_date: params.end_date,
+            is_active: params.end_date.is_none() || params.end_date > Some(chrono::Utc::now().date_naive()),
+            description: params.description,
         };
         
-        let component = ComponentInstance::new(organization_id, partnership_data)?;
+        let component = ComponentInstance::new(params.organization_id, partnership_data)?;
         let component_id = component.id;
         
         // Store component
@@ -464,11 +539,11 @@ impl ComponentCommandHandler {
         
         // Create event
         let event = ComponentDataEvent::PartnershipAdded {
-            organization_id,
+            organization_id: params.organization_id,
             component_id,
-            partner_name,
-            partnership_type,
-            start_date,
+            partner_name: params.partner_name,
+            partnership_type: params.partnership_type,
+            start_date: params.start_date,
             timestamp: Utc::now(),
         };
         

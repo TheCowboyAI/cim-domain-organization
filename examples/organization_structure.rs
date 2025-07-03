@@ -8,17 +8,17 @@
 
 use cim_domain_organization::{
     aggregate::Organization,
-    commands::{CreateOrganization, CreateDepartment, AssignRole, UpdateOrganizationStatus},
-    events::{OrganizationCreated, DepartmentCreated, RoleAssigned, StatusUpdated},
-    value_objects::{
-        OrganizationId, OrganizationType, OrganizationStatus, 
-        DepartmentId, Role, RoleLevel, SizeCategory, Address
-    },
+    commands::{AssignRole, CreateDepartment, CreateOrganization, UpdateOrganizationStatus},
+    events::{DepartmentCreated, OrganizationCreated, RoleAssigned, StatusUpdated},
     handlers::OrganizationCommandHandler,
-    queries::{GetOrganization, GetDepartmentStructure, OrganizationQueryHandler},
+    queries::{GetDepartmentStructure, GetOrganization, OrganizationQueryHandler},
+    value_objects::{
+        Address, DepartmentId, OrganizationId, OrganizationStatus, OrganizationType, Role,
+        RoleLevel, SizeCategory,
+    },
 };
-use uuid::Uuid;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let query_handler = OrganizationQueryHandler::new();
 
     // Example implementation demonstrates organization structure management
-    
+
     println!("\n=== Example completed successfully! ===");
     Ok(())
 }
