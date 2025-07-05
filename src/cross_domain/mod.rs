@@ -72,6 +72,12 @@ pub struct InMemoryCrossDomainResolver {
     locations: Arc<RwLock<HashMap<Uuid, LocationDetails>>>,
 }
 
+impl Default for InMemoryCrossDomainResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryCrossDomainResolver {
     pub fn new() -> Self {
         Self {

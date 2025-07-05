@@ -43,6 +43,12 @@ pub struct InMemoryReadModelStore {
     person_organizations: Arc<tokio::sync::RwLock<HashMap<Uuid, Vec<MemberOrganizationView>>>>,
 }
 
+impl Default for InMemoryReadModelStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryReadModelStore {
     pub fn new() -> Self {
         Self {

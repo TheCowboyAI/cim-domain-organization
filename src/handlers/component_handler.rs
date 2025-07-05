@@ -221,7 +221,7 @@ impl ComponentCommandHandler {
     ) -> DomainResult<Vec<ComponentDataEvent>> {
         // Create contact component
         let phone = PhoneNumber::new(params.phone_number.clone())
-            .map_err(|e| DomainError::ValidationError(e))?;
+            .map_err(DomainError::ValidationError)?;
         let contact_data = ContactComponentData {
             contact_type: params.contact_type,
             phone,
@@ -270,7 +270,7 @@ impl ComponentCommandHandler {
         // Apply changes
         if let Some(new_phone) = &params.phone_number {
             component.data.phone = PhoneNumber::new(new_phone.clone())
-                .map_err(|e| DomainError::ValidationError(e))?;
+                .map_err(DomainError::ValidationError)?;
         }
         if let Some(ext) = params.extension.clone() {
             component.data.extension = Some(ext);
@@ -333,7 +333,7 @@ impl ComponentCommandHandler {
     ) -> DomainResult<Vec<ComponentDataEvent>> {
         // Create address component
         let address = Address::new(params.line1, params.line2, params.city.clone(), params.state_province, params.postal_code, params.country.clone())
-            .map_err(|e| DomainError::ValidationError(e))?;
+            .map_err(DomainError::ValidationError)?;
         let address_data = AddressComponentData {
             address_type: params.address_type,
             address,

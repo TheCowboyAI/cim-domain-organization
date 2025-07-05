@@ -87,8 +87,8 @@ impl ComponentStore for InMemoryComponentStore {
     async fn update_component<T: Send + Sync + 'static>(&self, component: ComponentInstance<T>) -> DomainResult<()> {
         let mut storage = self.storage.write().await;
         
-        if storage.contains_key(&component.id) {
-            storage.insert(component.id, Box::new(component));
+        if let std::collections::hash_map::Entry::Occupied(mut e) = storage.entry(component.id) {
+            e.insert(Box::new(component));
             Ok(())
         } else {
             Err(DomainError::generic("Component not found"))
