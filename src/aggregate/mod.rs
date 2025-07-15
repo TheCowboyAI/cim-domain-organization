@@ -634,6 +634,9 @@ pub enum OrganizationError {
 
     #[error("Invalid acquisition: {0}")]
     InvalidAcquisition(String),
+    
+    #[error("Cross-domain error: {0}")]
+    CrossDomainError(String),
 }
 
 /// Repository for organizations

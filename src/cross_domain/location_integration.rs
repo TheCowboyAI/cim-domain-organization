@@ -1,6 +1,6 @@
 //! Location domain integration for Organization domain
 
-use crate::errors::OrganizationError;
+use crate::aggregate::OrganizationError;
 use async_trait::async_trait;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -63,7 +63,7 @@ impl super::CrossDomainResolver for NatsLocationResolver {
         // Create request
         let request = GetLocationDetailsRequest { location_id };
         let payload = serde_json::to_vec(&request)
-            .map_err(|e| OrganizationError::SerializationError(e.to_string()))?;
+            .map_err(|e| OrganizationError::CrossDomainError(format!("Serialization error: {}", e)))?;
         
         // Send request-reply to Location domain
         let subject = "locations.location.query.v1";
@@ -74,7 +74,7 @@ impl super::CrossDomainResolver for NatsLocationResolver {
         ).await {
             Ok(Ok(msg)) => {
                 let response: GetLocationDetailsResponse = serde_json::from_slice(&msg.payload)
-                    .map_err(|e| OrganizationError::DeserializationError(e.to_string()))?;
+                    .map_err(|e| OrganizationError::CrossDomainError(format!("Deserialization error: {}", e)))?;
                 Ok(response.location)
             },
             Ok(Err(e)) => {
@@ -99,7 +99,7 @@ impl super::CrossDomainResolver for NatsLocationResolver {
         // Create batch request
         let request = GetLocationDetailsBatchRequest { location_ids };
         let payload = serde_json::to_vec(&request)
-            .map_err(|e| OrganizationError::SerializationError(e.to_string()))?;
+            .map_err(|e| OrganizationError::CrossDomainError(format!("Serialization error: {}", e)))?;
         
         // Send request-reply to Location domain
         let subject = "locations.location.query-batch.v1";
@@ -110,7 +110,7 @@ impl super::CrossDomainResolver for NatsLocationResolver {
         ).await {
             Ok(Ok(msg)) => {
                 let response: GetLocationDetailsBatchResponse = serde_json::from_slice(&msg.payload)
-                    .map_err(|e| OrganizationError::DeserializationError(e.to_string()))?;
+                    .map_err(|e| OrganizationError::CrossDomainError(format!("Deserialization error: {}", e)))?;
                 Ok(response.locations)
             },
             Ok(Err(e)) => {
@@ -167,11 +167,18 @@ impl super::CrossDomainResolver for CombinedCrossDomainResolver {
 /// Event handler for Location domain events
 pub struct LocationEventHandler {
     nats_client: Arc<async_nats::Client>,
+    read_model_store: Arc<dyn super::super::handlers::query_handler::ReadModelStore>,
 }
 
 impl LocationEventHandler {
-    pub fn new(nats_client: Arc<async_nats::Client>) -> Self {
-        Self { nats_client }
+    pub fn new(
+        nats_client: Arc<async_nats::Client>,
+        read_model_store: Arc<dyn super::super::handlers::query_handler::ReadModelStore>
+    ) -> Self {
+        Self { 
+            nats_client,
+            read_model_store,
+        }
     }
     
     /// Subscribe to location domain events
@@ -179,7 +186,7 @@ impl LocationEventHandler {
         let mut subscriber = self.nats_client
             .subscribe("locations.location.*.v1")
             .await
-            .map_err(|e| OrganizationError::NatsError(e.to_string()))?;
+            .map_err(|e| OrganizationError::CrossDomainError(format!("NATS error: {}", e)))?;
             
         // Process events in background
         let handler = self.clone();
@@ -203,7 +210,7 @@ impl LocationEventHandler {
         
         let event_type = parts[2];
         let event_data: serde_json::Value = serde_json::from_slice(&msg.payload)
-            .map_err(|e| OrganizationError::DeserializationError(e.to_string()))?;
+            .map_err(|e| OrganizationError::CrossDomainError(format!("Deserialization error: {}", e)))?;
         
         match event_type {
             "created" => self.handle_location_created(event_data).await,
@@ -214,9 +221,31 @@ impl LocationEventHandler {
     
     /// Handle location created event from Location domain
     pub async fn handle_location_created(&self, event: serde_json::Value) -> Result<(), OrganizationError> {
-        // Update any cached location information
+        // Extract location details from event
         tracing::info!("Received location created event: {:?}", event);
-        // TODO: Update local projections or caches
+        
+        // Extract location_id and details
+        if let Some(location_id) = event.get("location_id")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok()) 
+        {
+            // Get all organizations with this location
+            let all_orgs = self.read_model_store.get_all_organizations().await?;
+            
+            // Update organization views that reference this location
+            for mut org in all_orgs {
+                if org.location_id == Some(location_id) {
+                    // Update location name if available
+                    if let Some(location_name) = event.get("name").and_then(|v| v.as_str()) {
+                        org.primary_location_name = Some(location_name.to_string());
+                    }
+                    
+                    // Update the organization view
+                    self.read_model_store.update_organization(org).await?;
+                }
+            }
+        }
+        
         Ok(())
     }
     
@@ -224,7 +253,29 @@ impl LocationEventHandler {
     pub async fn handle_location_updated(&self, event: serde_json::Value) -> Result<(), OrganizationError> {
         // Update cached location information
         tracing::info!("Received location updated event: {:?}", event);
-        // TODO: Update local projections or caches
+        
+        // Extract location_id and updated details
+        if let Some(location_id) = event.get("location_id")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok()) 
+        {
+            // Get all organizations with this location
+            let all_orgs = self.read_model_store.get_all_organizations().await?;
+            
+            // Update organization views that reference this location
+            for mut org in all_orgs {
+                if org.location_id == Some(location_id) {
+                    // Update location name if available
+                    if let Some(location_name) = event.get("name").and_then(|v| v.as_str()) {
+                        org.primary_location_name = Some(location_name.to_string());
+                    }
+                    
+                    // Update the organization view
+                    self.read_model_store.update_organization(org).await?;
+                }
+            }
+        }
+        
         Ok(())
     }
 }
@@ -233,6 +284,7 @@ impl Clone for LocationEventHandler {
     fn clone(&self) -> Self {
         Self {
             nats_client: self.nats_client.clone(),
+            read_model_store: self.read_model_store.clone(),
         }
     }
 }

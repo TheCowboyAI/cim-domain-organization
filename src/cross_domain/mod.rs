@@ -4,7 +4,7 @@
 //! - Person domain: For member name resolution
 //! - Location domain: For location name resolution
 
-use crate::errors::OrganizationError;
+use crate::aggregate::OrganizationError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -147,7 +147,7 @@ impl<R: CrossDomainResolver> CrossDomainIntegrationService<R> {
     /// Enrich organization view with person names
     pub async fn enrich_with_person_names(
         &self,
-        members: &mut Vec<crate::projections::views::MemberView>,
+        members: &mut Vec<crate::projections::MemberView>,
     ) -> Result<(), OrganizationError> {
         let person_ids: Vec<Uuid> = members.iter().map(|m| m.person_id).collect();
         let person_details = self.resolver.get_person_details_batch(person_ids).await?;
@@ -164,7 +164,7 @@ impl<R: CrossDomainResolver> CrossDomainIntegrationService<R> {
     /// Enrich organization view with location name
     pub async fn enrich_with_location_name(
         &self,
-        org: &mut crate::projections::views::OrganizationView,
+        org: &mut crate::projections::OrganizationView,
         location_id: Uuid,
     ) -> Result<(), OrganizationError> {
         if let Some(details) = self.resolver.get_location_details(location_id).await? {
@@ -195,13 +195,15 @@ mod tests {
         
         // Create member view
         let mut members = vec![
-            crate::projections::views::MemberView {
+            crate::projections::MemberView {
                 person_id,
-                organization_id: Uuid::new_v4(),
                 person_name: format!("Person {person_id}"),
-                role: "Software Engineer".to_string(),
-                joined_date: chrono::Utc::now(),
-                tenure_days: 0,
+                role: crate::value_objects::OrganizationRole::software_engineer(),
+                joined_at: chrono::Utc::now(),
+                reports_to_id: None,
+                reports_to_name: None,
+                direct_reports_count: 0,
+                is_active: true,
             }
         ];
         
@@ -227,16 +229,18 @@ mod tests {
         }).await;
         
         // Create organization view
-        let mut org = crate::projections::views::OrganizationView {
-            id: Uuid::new_v4(),
+        let mut org = crate::projections::OrganizationView {
+            organization_id: Uuid::new_v4(),
             name: "Test Corp".to_string(),
-            category: "Company".to_string(),
-            size: 100,
-            headquarters_location: Some(location_id),
-            founded_date: None,
-            member_count: 0,
-            average_tenure_days: None,
+            org_type: crate::value_objects::OrganizationType::Company,
+            status: crate::value_objects::OrganizationStatus::Active,
+            parent_id: None,
+            child_units: vec![],
+            member_count: 100,
+            location_count: 1,
+            location_id: Some(location_id),
             primary_location_name: None,
+            size_category: crate::value_objects::SizeCategory::Large,
         };
         
         // Enrich with location name

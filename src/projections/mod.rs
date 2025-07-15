@@ -26,6 +26,8 @@ pub struct OrganizationView {
     pub member_count: usize,
     /// Location count
     pub location_count: usize,
+    /// Primary location ID
+    pub location_id: Option<Uuid>,
     /// Primary location name
     pub primary_location_name: Option<String>,
     /// Size category based on member count

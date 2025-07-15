@@ -1,6 +1,6 @@
 //! Person domain integration for Organization domain
 
-use crate::errors::OrganizationError;
+use crate::aggregate::OrganizationError;
 use async_trait::async_trait;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -58,7 +58,7 @@ impl super::CrossDomainResolver for NatsPersonResolver {
         // Create request
         let request = GetPersonDetailsRequest { person_id };
         let payload = serde_json::to_vec(&request)
-            .map_err(|e| OrganizationError::SerializationError(e.to_string()))?;
+            .map_err(|e| OrganizationError::CrossDomainError(format!("Serialization error: {}", e)))?;
         
         // Send request-reply to Person domain
         let subject = "people.person.query.v1";
@@ -69,7 +69,7 @@ impl super::CrossDomainResolver for NatsPersonResolver {
         ).await {
             Ok(Ok(msg)) => {
                 let response: GetPersonDetailsResponse = serde_json::from_slice(&msg.payload)
-                    .map_err(|e| OrganizationError::DeserializationError(e.to_string()))?;
+                    .map_err(|e| OrganizationError::CrossDomainError(format!("Deserialization error: {}", e)))?;
                 Ok(response.person)
             },
             Ok(Err(e)) => {
@@ -94,7 +94,7 @@ impl super::CrossDomainResolver for NatsPersonResolver {
         // Create batch request
         let request = GetPersonDetailsBatchRequest { person_ids };
         let payload = serde_json::to_vec(&request)
-            .map_err(|e| OrganizationError::SerializationError(e.to_string()))?;
+            .map_err(|e| OrganizationError::CrossDomainError(format!("Serialization error: {}", e)))?;
         
         // Send request-reply to Person domain
         let subject = "people.person.query-batch.v1";
@@ -105,7 +105,7 @@ impl super::CrossDomainResolver for NatsPersonResolver {
         ).await {
             Ok(Ok(msg)) => {
                 let response: GetPersonDetailsBatchResponse = serde_json::from_slice(&msg.payload)
-                    .map_err(|e| OrganizationError::DeserializationError(e.to_string()))?;
+                    .map_err(|e| OrganizationError::CrossDomainError(format!("Deserialization error: {}", e)))?;
                 Ok(response.persons)
             },
             Ok(Err(e)) => {
@@ -130,11 +130,18 @@ impl super::CrossDomainResolver for NatsPersonResolver {
 /// Event handler for Person domain events
 pub struct PersonEventHandler {
     nats_client: Arc<async_nats::Client>,
+    read_model_store: Arc<dyn super::super::handlers::query_handler::ReadModelStore>,
 }
 
 impl PersonEventHandler {
-    pub fn new(nats_client: Arc<async_nats::Client>) -> Self {
-        Self { nats_client }
+    pub fn new(
+        nats_client: Arc<async_nats::Client>, 
+        read_model_store: Arc<dyn super::super::handlers::query_handler::ReadModelStore>
+    ) -> Self {
+        Self { 
+            nats_client,
+            read_model_store,
+        }
     }
     
     /// Subscribe to person domain events
@@ -142,7 +149,7 @@ impl PersonEventHandler {
         let mut subscriber = self.nats_client
             .subscribe("people.person.*.v1")
             .await
-            .map_err(|e| OrganizationError::NatsError(e.to_string()))?;
+            .map_err(|e| OrganizationError::CrossDomainError(format!("NATS error: {}", e)))?;
             
         // Process events in background
         let handler = self.clone();
@@ -166,7 +173,7 @@ impl PersonEventHandler {
         
         let event_type = parts[2];
         let event_data: serde_json::Value = serde_json::from_slice(&msg.payload)
-            .map_err(|e| OrganizationError::DeserializationError(e.to_string()))?;
+            .map_err(|e| OrganizationError::CrossDomainError(format!("Deserialization error: {}", e)))?;
         
         match event_type {
             "created" => self.handle_person_created(event_data).await,
@@ -177,9 +184,36 @@ impl PersonEventHandler {
     
     /// Handle person created event from Person domain
     pub async fn handle_person_created(&self, event: serde_json::Value) -> Result<(), OrganizationError> {
-        // Update any cached person information
+        // Extract person details from event
         tracing::info!("Received person created event: {:?}", event);
-        // TODO: Update local projections or caches
+        
+        // Extract person_id and details
+        if let Some(person_id) = event.get("person_id")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok()) 
+        {
+            // Get all organizations this person belongs to
+            let person_orgs = self.read_model_store.get_person_organizations(person_id).await?;
+            
+            // Update member views in each organization
+            for member_org in person_orgs {
+                let org_members = self.read_model_store.get_organization_members(member_org.organization_id).await?;
+                
+                // Find and update the member with new person details
+                for mut member in org_members {
+                    if member.person_id == person_id {
+                        // Update person name if available
+                        if let Some(full_name) = event.get("full_name").and_then(|v| v.as_str()) {
+                            member.person_name = full_name.to_string();
+                        }
+                        
+                        // Update the member view
+                        self.read_model_store.update_member(member_org.organization_id, member).await?;
+                    }
+                }
+            }
+        }
+        
         Ok(())
     }
     
@@ -187,7 +221,34 @@ impl PersonEventHandler {
     pub async fn handle_person_updated(&self, event: serde_json::Value) -> Result<(), OrganizationError> {
         // Update cached person information
         tracing::info!("Received person updated event: {:?}", event);
-        // TODO: Update local projections or caches
+        
+        // Extract person_id and updated details
+        if let Some(person_id) = event.get("person_id")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok()) 
+        {
+            // Get all organizations this person belongs to
+            let person_orgs = self.read_model_store.get_person_organizations(person_id).await?;
+            
+            // Update member views in each organization
+            for member_org in person_orgs {
+                let org_members = self.read_model_store.get_organization_members(member_org.organization_id).await?;
+                
+                // Find and update the member with new person details
+                for mut member in org_members {
+                    if member.person_id == person_id {
+                        // Update person name if available
+                        if let Some(full_name) = event.get("full_name").and_then(|v| v.as_str()) {
+                            member.person_name = full_name.to_string();
+                        }
+                        
+                        // Update the member view
+                        self.read_model_store.update_member(member_org.organization_id, member).await?;
+                    }
+                }
+            }
+        }
+        
         Ok(())
     }
 }
@@ -196,6 +257,7 @@ impl Clone for PersonEventHandler {
     fn clone(&self) -> Self {
         Self {
             nats_client: self.nats_client.clone(),
+            read_model_store: self.read_model_store.clone(),
         }
     }
 }

@@ -106,12 +106,15 @@ impl ReadModelStore for InMemoryReadModelStore {
         // Find organization view
         let orgs = self.organizations.read().await;
         if let Some(org_view) = orgs.get(&org_id) {
+            // Determine if primary based on role level
+            let is_primary = member.role.level >= RoleLevel::Manager;
+            
             let membership = MemberOrganizationView {
                 organization_id: org_id,
                 organization_name: org_view.name.clone(),
                 org_type: org_view.org_type,
                 role: member.role.clone(),
-                is_primary: true, // TODO: Determine from member data
+                is_primary,
                 joined_at: member.joined_at,
             };
             
@@ -145,11 +148,20 @@ impl ReadModelStore for InMemoryReadModelStore {
 /// Projection updater that handles events and updates read models
 pub struct ProjectionUpdater<RS: ReadModelStore> {
     read_store: RS,
+    cross_domain_resolver: Option<Arc<dyn crate::cross_domain::CrossDomainResolver>>,
 }
 
 impl<RS: ReadModelStore> ProjectionUpdater<RS> {
     pub fn new(read_store: RS) -> Self {
-        Self { read_store }
+        Self { 
+            read_store,
+            cross_domain_resolver: None,
+        }
+    }
+    
+    pub fn with_cross_domain_resolver(mut self, resolver: Arc<dyn crate::cross_domain::CrossDomainResolver>) -> Self {
+        self.cross_domain_resolver = Some(resolver);
+        self
     }
     
     /// Handle domain events and update projections
@@ -165,20 +177,53 @@ impl<RS: ReadModelStore> ProjectionUpdater<RS> {
                     child_units: vec![],
                     member_count: 0,
                     location_count: 0,
+                    location_id: e.primary_location_id,
                     primary_location_name: None,
                     size_category: SizeCategory::Small, // Start as small
                 };
                 self.read_store.update_organization(view).await?;
             }
             OrganizationEvent::MemberAdded(e) => {
+                // Get person name from cross-domain resolver if available
+                let person_name = if let Some(ref resolver) = self.cross_domain_resolver {
+                    if let Ok(Some(person)) = resolver.get_person_details(e.member.person_id).await {
+                        person.full_name
+                    } else {
+                        format!("Person {}", e.member.person_id)
+                    }
+                } else {
+                    format!("Person {}", e.member.person_id)
+                };
+                
+                // Get manager name if reports_to is set
+                let reports_to_name = if let Some(manager_id) = e.member.reports_to {
+                    if let Some(ref resolver) = self.cross_domain_resolver {
+                        if let Ok(Some(manager)) = resolver.get_person_details(manager_id).await {
+                            Some(manager.full_name)
+                        } else {
+                            Some(format!("Person {manager_id}"))
+                        }
+                    } else {
+                        Some(format!("Person {manager_id}"))
+                    }
+                } else {
+                    None
+                };
+                
+                // Calculate direct reports count
+                let org_members = self.read_store.get_organization_members(e.organization_id).await.unwrap_or_default();
+                let direct_reports_count = org_members.iter()
+                    .filter(|m| m.reports_to_id == Some(e.member.person_id))
+                    .count();
+                
                 let member_view = MemberView {
                     person_id: e.member.person_id,
-                    person_name: format!("Person {}", e.member.person_id), // TODO: Get from Person domain
+                    person_name,
                     role: e.member.role.clone(),
                     reports_to_id: e.member.reports_to,
-                    reports_to_name: e.member.reports_to.map(|id| format!("Person {id}")),
+                    reports_to_name,
                     joined_at: e.added_at,
-                    direct_reports_count: 0, // TODO: Calculate from other members
+                    direct_reports_count,
                     is_active: true,
                 };
                 self.read_store.update_member(e.organization_id, member_view).await?;
@@ -200,8 +245,149 @@ impl<RS: ReadModelStore> ProjectionUpdater<RS> {
                     self.read_store.update_organization(org).await?;
                 }
             }
-            // TODO: Handle other events
-            _ => {}
+            OrganizationEvent::Updated(e) => {
+                if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
+                    if let Some(name) = &e.name {
+                        org.name = name.clone();
+                    }
+                    if let Some(location_id) = e.primary_location_id {
+                        org.location_id = Some(location_id);
+                        org.primary_location_name = if let Some(ref resolver) = self.cross_domain_resolver {
+                            if let Ok(Some(location)) = resolver.get_location_details(location_id).await {
+                                Some(location.name)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                    }
+                    self.read_store.update_organization(org).await?;
+                }
+            }
+            OrganizationEvent::StatusChanged(e) => {
+                if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
+                    org.status = e.new_status;
+                    self.read_store.update_organization(org).await?;
+                }
+            }
+            OrganizationEvent::MemberRoleUpdated(e) => {
+                let members = self.read_store.get_organization_members(e.organization_id).await?;
+                if let Some(mut member) = members.into_iter().find(|m| m.person_id == e.person_id) {
+                    member.role = e.new_role.clone();
+                    self.read_store.update_member(e.organization_id, member).await?;
+                }
+            }
+            OrganizationEvent::ReportingRelationshipChanged(e) => {
+                let members = self.read_store.get_organization_members(e.organization_id).await?;
+                if let Some(member) = members.into_iter().find(|m| m.person_id == e.person_id) {
+                    let mut member = member;
+                    member.reports_to_id = e.new_manager_id;
+                    member.reports_to_name = if let Some(manager_id) = e.new_manager_id {
+                        if let Some(ref resolver) = self.cross_domain_resolver {
+                            if let Ok(Some(manager)) = resolver.get_person_details(manager_id).await {
+                                Some(manager.full_name)
+                            } else {
+                                Some(format!("Person {manager_id}"))
+                            }
+                        } else {
+                            Some(format!("Person {manager_id}"))
+                        }
+                    } else {
+                        None
+                    };
+                    self.read_store.update_member(e.organization_id, member).await?;
+                    
+                    // Update direct reports counts
+                    if let Some(old_manager_id) = e.old_manager_id {
+                        let all_members = self.read_store.get_organization_members(e.organization_id).await?;
+                        if let Some(mut old_manager) = all_members.iter().find(|m| m.person_id == old_manager_id).cloned() {
+                            old_manager.direct_reports_count = all_members.iter()
+                                .filter(|m| m.reports_to_id == Some(old_manager_id))
+                                .count();
+                            self.read_store.update_member(e.organization_id, old_manager).await?;
+                        }
+                    }
+                    if let Some(new_manager_id) = e.new_manager_id {
+                        let all_members = self.read_store.get_organization_members(e.organization_id).await?;
+                        if let Some(mut new_manager) = all_members.iter().find(|m| m.person_id == new_manager_id).cloned() {
+                            new_manager.direct_reports_count = all_members.iter()
+                                .filter(|m| m.reports_to_id == Some(new_manager_id))
+                                .count();
+                            self.read_store.update_member(e.organization_id, new_manager).await?;
+                        }
+                    }
+                }
+            }
+            OrganizationEvent::ChildOrganizationAdded(e) => {
+                if let Some(mut parent) = self.read_store.get_organization(e.parent_id).await? {
+                    parent.child_units.push(e.child_id);
+                    self.read_store.update_organization(parent).await?;
+                }
+            }
+            OrganizationEvent::ChildOrganizationRemoved(e) => {
+                if let Some(mut parent) = self.read_store.get_organization(e.parent_id).await? {
+                    parent.child_units.retain(|&id| id != e.child_id);
+                    self.read_store.update_organization(parent).await?;
+                }
+            }
+            OrganizationEvent::LocationAdded(e) => {
+                if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
+                    org.location_count += 1;
+                    if e.is_primary {
+                        org.location_id = Some(e.location_id);
+                        org.primary_location_name = if let Some(ref resolver) = self.cross_domain_resolver {
+                            if let Ok(Some(location)) = resolver.get_location_details(e.location_id).await {
+                                Some(location.name)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                    }
+                    self.read_store.update_organization(org).await?;
+                }
+            }
+            OrganizationEvent::LocationRemoved(e) => {
+                if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
+                    org.location_count = org.location_count.saturating_sub(1);
+                    self.read_store.update_organization(org).await?;
+                }
+            }
+            OrganizationEvent::PrimaryLocationChanged(e) => {
+                if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
+                    org.location_id = Some(e.new_location_id);
+                    org.primary_location_name = if let Some(ref resolver) = self.cross_domain_resolver {
+                        if let Ok(Some(location)) = resolver.get_location_details(e.new_location_id).await {
+                            Some(location.name)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    self.read_store.update_organization(org).await?;
+                }
+            }
+            OrganizationEvent::Dissolved(e) => {
+                if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
+                    org.status = OrganizationStatus::Dissolved;
+                    self.read_store.update_organization(org).await?;
+                }
+            }
+            OrganizationEvent::Merged(e) => {
+                if let Some(mut org) = self.read_store.get_organization(e.source_organization_id).await? {
+                    org.status = OrganizationStatus::Merged;
+                    self.read_store.update_organization(org).await?;
+                }
+            }
+            OrganizationEvent::Acquired(e) => {
+                if let Some(mut org) = self.read_store.get_organization(e.acquired_organization_id).await? {
+                    org.status = OrganizationStatus::Acquired;
+                    self.read_store.update_organization(org).await?;
+                }
+            }
         }
         Ok(())
     }
