@@ -4,6 +4,16 @@ use cim_domain::{DomainResult, DomainError};
 use std::sync::Arc;
 use chrono::Utc;
 
+/// Parameters for setting financial information
+pub struct FinancialInfoParams {
+    pub fiscal_year_end: Option<String>,
+    pub revenue_range: Option<RevenueRange>,
+    pub employee_count_range: Option<EmployeeRange>,
+    pub credit_rating: Option<String>,
+    pub duns_number: Option<String>,
+    pub tax_id: Option<String>,
+}
+
 use crate::aggregate::OrganizationId;
 use crate::commands::ComponentCommand;
 use crate::events::ComponentDataEvent;
@@ -13,7 +23,7 @@ use crate::components::data::{
     CertificationComponentData, IndustryComponentData, FinancialComponentData,
     SocialMediaComponentData, PartnershipComponentData, ContactType, AddressType,
     CertificationType, CertificationStatus, ClassificationSystem, SocialPlatform,
-    PartnershipType,
+    PartnershipType, RevenueRange, EmployeeRange,
 };
 use crate::value_objects::{PhoneNumber, Address};
 
@@ -169,7 +179,15 @@ impl ComponentCommandHandler {
                 self.handle_add_industry(organization_id, classification_system, code, description, is_primary).await
             }
             ComponentCommand::SetFinancialInfo { organization_id, fiscal_year_end, revenue_range, employee_count_range, credit_rating, duns_number, tax_id } => {
-                self.handle_set_financial_info(organization_id, fiscal_year_end, revenue_range, employee_count_range, credit_rating, duns_number, tax_id).await
+                let params = FinancialInfoParams {
+                    fiscal_year_end,
+                    revenue_range,
+                    employee_count_range,
+                    credit_rating,
+                    duns_number,
+                    tax_id,
+                };
+                self.handle_set_financial_info(organization_id, params).await
             }
             ComponentCommand::AddSocialProfile { organization_id, platform, profile_url, handle, is_verified } => {
                 self.handle_add_social_profile(organization_id, platform, profile_url, handle, is_verified).await
@@ -443,21 +461,16 @@ impl ComponentCommandHandler {
     async fn handle_set_financial_info(
         &self,
         organization_id: OrganizationId,
-        fiscal_year_end: Option<String>,
-        revenue_range: Option<crate::components::data::RevenueRange>,
-        employee_count_range: Option<crate::components::data::EmployeeRange>,
-        credit_rating: Option<String>,
-        duns_number: Option<String>,
-        tax_id: Option<String>,
+        params: FinancialInfoParams,
     ) -> DomainResult<Vec<ComponentDataEvent>> {
         // Create financial component
         let financial_data = FinancialComponentData {
-            fiscal_year_end,
-            revenue_range,
-            employee_count_range,
-            credit_rating,
-            duns_number,
-            tax_id,
+            fiscal_year_end: params.fiscal_year_end,
+            revenue_range: params.revenue_range,
+            employee_count_range: params.employee_count_range,
+            credit_rating: params.credit_rating,
+            duns_number: params.duns_number,
+            tax_id: params.tax_id,
         };
         
         let component = ComponentInstance::new(organization_id, financial_data)?;
@@ -468,8 +481,8 @@ impl ComponentCommandHandler {
         // Create event
         let event = ComponentDataEvent::FinancialInfoSet {
             organization_id,
-            revenue_range,
-            employee_count_range,
+            revenue_range: params.revenue_range,
+            employee_count_range: params.employee_count_range,
             timestamp: Utc::now(),
         };
         

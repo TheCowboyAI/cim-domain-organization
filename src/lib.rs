@@ -32,7 +32,9 @@ pub mod value_objects;
 pub use aggregate::{OrganizationAggregate, OrganizationId, OrganizationCommand, OrganizationEvent, OrganizationError};
 pub use commands::*;
 pub use components::*;
-pub use cross_domain::{CrossDomainResolver, CrossDomainIntegrationService, PersonDetails, LocationDetails};
+pub use cross_domain::{CrossDomainResolver, CrossDomainIntegrationService, PersonDetails};
+// TODO: LocationDetails should be handled by composition with cim-domain-location
+// pub use cross_domain::LocationDetails;
 pub use events::*;
 pub use handlers::{OrganizationCommandHandler, OrganizationQueryHandler, ComponentCommandHandler};
 pub use infrastructure::{ComponentStore, InMemoryComponentStore};

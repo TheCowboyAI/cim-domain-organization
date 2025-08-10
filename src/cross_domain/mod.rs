@@ -13,10 +13,10 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 pub mod person_integration;
-pub mod location_integration;
+// pub mod location_integration; // TODO: Location should be handled by composition, not embedding
 
 pub use person_integration::*;
-pub use location_integration::*;
+// pub use location_integration::*; // TODO: Location should be handled by composition
 
 /// Cross-domain query for getting person details
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,21 +33,22 @@ pub struct PersonDetails {
     pub title: Option<String>,
 }
 
-/// Cross-domain query for getting location details
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetLocationDetails {
-    pub location_id: Uuid,
-}
+// TODO: Location details should be handled by composition with cim-domain-location
+// /// Cross-domain query for getting location details
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct GetLocationDetails {
+//     pub location_id: Uuid,
+// }
 
-/// Location details response from Location domain
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LocationDetails {
-    pub location_id: Uuid,
-    pub name: String,
-    pub address: String,
-    pub city: String,
-    pub country: String,
-}
+// /// Location details response from Location domain
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct LocationDetails {
+//     pub location_id: Uuid,
+//     pub name: String,
+//     pub address: String,
+//     pub city: String,
+//     pub country: String,
+// }
 
 /// Service for resolving cross-domain references
 #[async_trait]
@@ -55,21 +56,24 @@ pub trait CrossDomainResolver: Send + Sync {
     /// Get person details from Person domain
     async fn get_person_details(&self, person_id: Uuid) -> Result<Option<PersonDetails>, OrganizationError>;
     
-    /// Get location details from Location domain
-    async fn get_location_details(&self, location_id: Uuid) -> Result<Option<LocationDetails>, OrganizationError>;
+    // TODO: Location details should be handled by composition with cim-domain-location
+    // /// Get location details from Location domain
+    // async fn get_location_details(&self, location_id: Uuid) -> Result<Option<LocationDetails>, OrganizationError>;
     
     /// Get multiple person details in batch
     async fn get_person_details_batch(&self, person_ids: Vec<Uuid>) -> Result<HashMap<Uuid, PersonDetails>, OrganizationError>;
     
-    /// Get multiple location details in batch
-    async fn get_location_details_batch(&self, location_ids: Vec<Uuid>) -> Result<HashMap<Uuid, LocationDetails>, OrganizationError>;
+    // TODO: Location details should be handled by composition with cim-domain-location
+    // /// Get multiple location details in batch
+    // async fn get_location_details_batch(&self, location_ids: Vec<Uuid>) -> Result<HashMap<Uuid, LocationDetails>, OrganizationError>;
 }
 
 /// In-memory implementation for testing
 #[derive(Clone)]
 pub struct InMemoryCrossDomainResolver {
     persons: Arc<RwLock<HashMap<Uuid, PersonDetails>>>,
-    locations: Arc<RwLock<HashMap<Uuid, LocationDetails>>>,
+    // TODO: Location storage should be handled by composition with cim-domain-location
+    // locations: Arc<RwLock<HashMap<Uuid, LocationDetails>>>,
 }
 
 impl Default for InMemoryCrossDomainResolver {
@@ -82,7 +86,8 @@ impl InMemoryCrossDomainResolver {
     pub fn new() -> Self {
         Self {
             persons: Arc::new(RwLock::new(HashMap::new())),
-            locations: Arc::new(RwLock::new(HashMap::new())),
+            // TODO: Location storage should be handled by composition with cim-domain-location
+            // locations: Arc::new(RwLock::new(HashMap::new())),
         }
     }
     
@@ -91,10 +96,11 @@ impl InMemoryCrossDomainResolver {
         self.persons.write().await.insert(details.person_id, details);
     }
     
-    /// Add test location data
-    pub async fn add_location(&self, details: LocationDetails) {
-        self.locations.write().await.insert(details.location_id, details);
-    }
+    // TODO: Location management should be handled by composition with cim-domain-location
+    // /// Add test location data
+    // pub async fn add_location(&self, details: LocationDetails) {
+    //     self.locations.write().await.insert(details.location_id, details);
+    // }
 }
 
 #[async_trait]
@@ -103,9 +109,10 @@ impl CrossDomainResolver for InMemoryCrossDomainResolver {
         Ok(self.persons.read().await.get(&person_id).cloned())
     }
     
-    async fn get_location_details(&self, location_id: Uuid) -> Result<Option<LocationDetails>, OrganizationError> {
-        Ok(self.locations.read().await.get(&location_id).cloned())
-    }
+    // TODO: Location details should be handled by composition with cim-domain-location
+    // async fn get_location_details(&self, location_id: Uuid) -> Result<Option<LocationDetails>, OrganizationError> {
+    //     Ok(self.locations.read().await.get(&location_id).cloned())
+    // }
     
     async fn get_person_details_batch(&self, person_ids: Vec<Uuid>) -> Result<HashMap<Uuid, PersonDetails>, OrganizationError> {
         let persons = self.persons.read().await;
@@ -120,18 +127,19 @@ impl CrossDomainResolver for InMemoryCrossDomainResolver {
         Ok(result)
     }
     
-    async fn get_location_details_batch(&self, location_ids: Vec<Uuid>) -> Result<HashMap<Uuid, LocationDetails>, OrganizationError> {
-        let locations = self.locations.read().await;
-        let mut result = HashMap::new();
-        
-        for location_id in location_ids {
-            if let Some(details) = locations.get(&location_id) {
-                result.insert(location_id, details.clone());
-            }
-        }
-        
-        Ok(result)
-    }
+    // TODO: Location details should be handled by composition with cim-domain-location
+    // async fn get_location_details_batch(&self, location_ids: Vec<Uuid>) -> Result<HashMap<Uuid, LocationDetails>, OrganizationError> {
+    //     let locations = self.locations.read().await;
+    //     let mut result = HashMap::new();
+    //     
+    //     for location_id in location_ids {
+    //         if let Some(details) = locations.get(&location_id) {
+    //             result.insert(location_id, details.clone());
+    //         }
+    //     }
+    //     
+    //     Ok(result)
+    // }
 }
 
 /// Service for handling cross-domain integration
@@ -147,7 +155,7 @@ impl<R: CrossDomainResolver> CrossDomainIntegrationService<R> {
     /// Enrich organization view with person names
     pub async fn enrich_with_person_names(
         &self,
-        members: &mut Vec<crate::projections::MemberView>,
+        members: &mut [crate::projections::MemberView],
     ) -> Result<(), OrganizationError> {
         let person_ids: Vec<Uuid> = members.iter().map(|m| m.person_id).collect();
         let person_details = self.resolver.get_person_details_batch(person_ids).await?;
@@ -161,18 +169,19 @@ impl<R: CrossDomainResolver> CrossDomainIntegrationService<R> {
         Ok(())
     }
     
-    /// Enrich organization view with location name
-    pub async fn enrich_with_location_name(
-        &self,
-        org: &mut crate::projections::OrganizationView,
-        location_id: Uuid,
-    ) -> Result<(), OrganizationError> {
-        if let Some(details) = self.resolver.get_location_details(location_id).await? {
-            org.primary_location_name = Some(format!("{}, {}", details.name, details.city));
-        }
-        
-        Ok(())
-    }
+    // TODO: Location name enrichment should be handled by composition with cim-domain-location
+    // /// Enrich organization view with location name
+    // pub async fn enrich_with_location_name(
+    //     &self,
+    //     org: &mut crate::projections::OrganizationView,
+    //     location_id: Uuid,
+    // ) -> Result<(), OrganizationError> {
+    //     if let Some(details) = self.resolver.get_location_details(location_id).await? {
+    //         org.primary_location_name = Some(format!("{}, {}", details.name, details.city));
+    //     }
+    //     
+    //     Ok(())
+    // }
 }
 
 #[cfg(test)]
@@ -213,39 +222,40 @@ mod tests {
         assert_eq!(members[0].person_name, "John Doe");
     }
     
-    #[tokio::test]
-    async fn test_location_name_resolution() {
-        let resolver = InMemoryCrossDomainResolver::new();
-        let service = CrossDomainIntegrationService::new(Arc::new(resolver.clone()));
-        
-        // Add test location
-        let location_id = Uuid::new_v4();
-        resolver.add_location(LocationDetails {
-            location_id,
-            name: "Main Office".to_string(),
-            address: "123 Main St".to_string(),
-            city: "San Francisco".to_string(),
-            country: "USA".to_string(),
-        }).await;
-        
-        // Create organization view
-        let mut org = crate::projections::OrganizationView {
-            organization_id: Uuid::new_v4(),
-            name: "Test Corp".to_string(),
-            org_type: crate::value_objects::OrganizationType::Company,
-            status: crate::value_objects::OrganizationStatus::Active,
-            parent_id: None,
-            child_units: vec![],
-            member_count: 100,
-            location_count: 1,
-            location_id: Some(location_id),
-            primary_location_name: None,
-            size_category: crate::value_objects::SizeCategory::Large,
-        };
-        
-        // Enrich with location name
-        service.enrich_with_location_name(&mut org, location_id).await.unwrap();
-        
-        assert_eq!(org.primary_location_name, Some("Main Office, San Francisco".to_string()));
-    }
+    // TODO: Location name resolution should be handled by composition with cim-domain-location
+    // #[tokio::test]
+    // async fn test_location_name_resolution() {
+    //     let resolver = InMemoryCrossDomainResolver::new();
+    //     let service = CrossDomainIntegrationService::new(Arc::new(resolver.clone()));
+    //     
+    //     // Add test location
+    //     let location_id = Uuid::new_v4();
+    //     resolver.add_location(LocationDetails {
+    //         location_id,
+    //         name: "Main Office".to_string(),
+    //         address: "123 Main St".to_string(),
+    //         city: "San Francisco".to_string(),
+    //         country: "USA".to_string(),
+    //     }).await;
+    //     
+    //     // Create organization view
+    //     let mut org = crate::projections::OrganizationView {
+    //         organization_id: Uuid::new_v4(),
+    //         name: "Test Corp".to_string(),
+    //         org_type: crate::value_objects::OrganizationType::Company,
+    //         status: crate::value_objects::OrganizationStatus::Active,
+    //         parent_id: None,
+    //         child_units: vec![],
+    //         member_count: 100,
+    //         location_count: 1,
+    //         location_id: Some(location_id),
+    //         primary_location_name: None,
+    //         size_category: crate::value_objects::SizeCategory::Large,
+    //     };
+    //     
+    //     // Enrich with location name
+    //     service.enrich_with_location_name(&mut org, location_id).await.unwrap();
+    //     
+    //     assert_eq!(org.primary_location_name, Some("Main Office, San Francisco".to_string()));
+    // }
 } 

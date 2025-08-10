@@ -176,9 +176,6 @@ impl<RS: ReadModelStore> ProjectionUpdater<RS> {
                     parent_id: e.parent_id,
                     child_units: vec![],
                     member_count: 0,
-                    location_count: 0,
-                    location_id: e.primary_location_id,
-                    primary_location_name: None,
                     size_category: SizeCategory::Small, // Start as small
                 };
                 self.read_store.update_organization(view).await?;
@@ -250,18 +247,19 @@ impl<RS: ReadModelStore> ProjectionUpdater<RS> {
                     if let Some(name) = &e.name {
                         org.name = name.clone();
                     }
-                    if let Some(location_id) = e.primary_location_id {
-                        org.location_id = Some(location_id);
-                        org.primary_location_name = if let Some(ref resolver) = self.cross_domain_resolver {
-                            if let Ok(Some(location)) = resolver.get_location_details(location_id).await {
-                                Some(location.name)
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        };
-                    }
+                    // TODO: Primary location should be handled by composition with cim-domain-location
+                    // if let Some(location_id) = e.primary_location_id {
+                    //     org.location_id = Some(location_id);
+                    //     org.primary_location_name = if let Some(ref resolver) = self.cross_domain_resolver {
+                    //         if let Ok(Some(location)) = resolver.get_location_details(location_id).await {
+                    //             Some(location.name)
+                    //         } else {
+                    //             None
+                    //         }
+                    //     } else {
+                    //         None
+                    //     };
+                    // }
                     self.read_store.update_organization(org).await?;
                 }
             }
@@ -331,44 +329,33 @@ impl<RS: ReadModelStore> ProjectionUpdater<RS> {
                     self.read_store.update_organization(parent).await?;
                 }
             }
-            OrganizationEvent::LocationAdded(e) => {
-                if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
-                    org.location_count += 1;
-                    if e.is_primary {
-                        org.location_id = Some(e.location_id);
-                        org.primary_location_name = if let Some(ref resolver) = self.cross_domain_resolver {
-                            if let Ok(Some(location)) = resolver.get_location_details(e.location_id).await {
-                                Some(location.name)
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        };
-                    }
-                    self.read_store.update_organization(org).await?;
-                }
+            // TODO: Location events should be handled by composition with cim-domain-location
+            // OrganizationEvent::LocationAdded(e) => {
+            //     if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
+            //         org.location_count += 1;
+            //         if e.is_primary {
+            //             org.location_id = Some(e.location_id);
+            //             org.primary_location_name = if let Some(ref resolver) = self.cross_domain_resolver {
+            //                 if let Ok(Some(location)) = resolver.get_location_details(e.location_id).await {
+            //                     Some(location.name)
+            //                 } else {
+            //                     None
+            //                 }
+            //             } else {
+            //                 None
+            //             };
+            //         }
+            //         self.read_store.update_organization(org).await?;
+            //     }
+            // }
+            OrganizationEvent::LocationAdded(_e) => {
+                // TODO: Location events should be handled by composition with cim-domain-location
             }
-            OrganizationEvent::LocationRemoved(e) => {
-                if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
-                    org.location_count = org.location_count.saturating_sub(1);
-                    self.read_store.update_organization(org).await?;
-                }
+            OrganizationEvent::LocationRemoved(_e) => {
+                // TODO: Location events should be handled by composition with cim-domain-location
             }
-            OrganizationEvent::PrimaryLocationChanged(e) => {
-                if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
-                    org.location_id = Some(e.new_location_id);
-                    org.primary_location_name = if let Some(ref resolver) = self.cross_domain_resolver {
-                        if let Ok(Some(location)) = resolver.get_location_details(e.new_location_id).await {
-                            Some(location.name)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
-                    self.read_store.update_organization(org).await?;
-                }
+            OrganizationEvent::PrimaryLocationChanged(_e) => {
+                // TODO: Primary location changes should be handled by composition with cim-domain-location
             }
             OrganizationEvent::Dissolved(e) => {
                 if let Some(mut org) = self.read_store.get_organization(e.organization_id).await? {
@@ -527,7 +514,7 @@ impl<RS: ReadModelStore> OrganizationQueryHandler<RS> {
         
         // Build reporting tree
         let max_depth = query.max_depth.unwrap_or(usize::MAX);
-        let root_members = self.build_reporting_tree(&members, None, max_depth, 0);
+        let root_members = Self::build_reporting_tree(&members, None, max_depth, 0);
         
         Ok(ReportingStructureView {
             organization_id: query.organization_id,
@@ -537,7 +524,6 @@ impl<RS: ReadModelStore> OrganizationQueryHandler<RS> {
     
     /// Build reporting tree recursively
     fn build_reporting_tree(
-        &self,
         all_members: &[MemberView],
         manager_id: Option<Uuid>,
         max_depth: usize,
@@ -550,7 +536,7 @@ impl<RS: ReadModelStore> OrganizationQueryHandler<RS> {
         all_members.iter()
             .filter(|m| m.reports_to_id == manager_id)
             .map(|member| {
-                let direct_reports = self.build_reporting_tree(
+                let direct_reports = Self::build_reporting_tree(
                     all_members,
                     Some(member.person_id),
                     max_depth,
@@ -646,7 +632,8 @@ impl<RS: ReadModelStore> OrganizationQueryHandler<RS> {
             members_by_role,
             members_by_level,
             average_tenure_days,
-            location_count: org.location_count,
+            // TODO: Location count should be handled by composition with cim-domain-location
+            // location_count: org.location_count,
             child_organization_count: org.child_units.len(),
             reporting_depth,
         })
@@ -657,14 +644,14 @@ impl<RS: ReadModelStore> OrganizationQueryHandler<RS> {
         let mut max_depth = 0;
         
         for member in members {
-            let depth = self.calculate_member_depth(member.person_id, members, 0);
+            let depth = Self::calculate_member_depth(member.person_id, members, 0);
             max_depth = max_depth.max(depth);
         }
         
         max_depth
     }
     
-    fn calculate_member_depth(&self, person_id: Uuid, all_members: &[MemberView], current_depth: usize) -> usize {
+    fn calculate_member_depth(person_id: Uuid, all_members: &[MemberView], current_depth: usize) -> usize {
         let direct_reports: Vec<_> = all_members.iter()
             .filter(|m| m.reports_to_id == Some(person_id))
             .collect();
@@ -673,7 +660,7 @@ impl<RS: ReadModelStore> OrganizationQueryHandler<RS> {
             current_depth
         } else {
             direct_reports.iter()
-                .map(|report| self.calculate_member_depth(report.person_id, all_members, current_depth + 1))
+                .map(|report| Self::calculate_member_depth(report.person_id, all_members, current_depth + 1))
                 .max()
                 .unwrap_or(current_depth)
         }
@@ -743,8 +730,6 @@ mod tests {
             parent_id: None,
             child_units: vec![],
             member_count: 0,
-            location_count: 0,
-            primary_location_name: None,
             size_category: SizeCategory::Small,
         };
         
@@ -774,8 +759,6 @@ mod tests {
             parent_id: None,
             child_units: vec![],
             member_count: 0,
-            location_count: 0,
-            primary_location_name: None,
             size_category: SizeCategory::Small,
         };
         
@@ -806,8 +789,6 @@ mod tests {
                 parent_id: None,
                 child_units: vec![],
                 member_count: i,
-                location_count: 0,
-                primary_location_name: None,
                 size_category: SizeCategory::Small,
             };
             store.update_organization(org_view).await.unwrap();
@@ -1023,12 +1004,13 @@ mod tests {
         panic!("TODO: Implement cross-domain person name resolution");
     }
     
-    #[tokio::test]
-    #[should_panic(expected = "TODO: Implement location name resolution")]
-    async fn test_todo_location_name_resolution() {
-        // TODO: Query location names from Location domain
-        panic!("TODO: Implement location name resolution");
-    }
+    // TODO: Location name resolution should be handled by composition with cim-domain-location
+    // #[tokio::test]
+    // #[should_panic(expected = "TODO: Implement location name resolution")]
+    // async fn test_todo_location_name_resolution() {
+    //     // TODO: Query location names from Location domain
+    //     panic!("TODO: Implement location name resolution");
+    // }
     
     #[tokio::test]
     #[should_panic(expected = "TODO: Implement average tenure calculation")]

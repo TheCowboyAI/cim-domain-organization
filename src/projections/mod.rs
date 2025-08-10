@@ -24,12 +24,6 @@ pub struct OrganizationView {
     pub child_units: Vec<Uuid>,
     /// Member count
     pub member_count: usize,
-    /// Location count
-    pub location_count: usize,
-    /// Primary location ID
-    pub location_id: Option<Uuid>,
-    /// Primary location name
-    pub primary_location_name: Option<String>,
     /// Size category based on member count
     pub size_category: SizeCategory,
 }
@@ -133,8 +127,8 @@ pub struct OrganizationStatistics {
     pub members_by_level: HashMap<RoleLevel, usize>,
     /// Average tenure in days
     pub average_tenure_days: u64,
-    /// Location count
-    pub location_count: usize,
+    // TODO: Location count should be handled by composition with cim-domain-location
+    // pub location_count: usize,
     /// Child organization count
     pub child_organization_count: usize,
     /// Maximum reporting depth
@@ -168,22 +162,24 @@ pub struct ChartEdge {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-/// Location distribution view
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LocationDistributionView {
-    pub organization_id: Uuid,
-    pub distributions: Vec<LocationDistribution>,
-    pub total_locations: usize,
-}
+// TODO: Location distribution should be handled by composition with cim-domain-location
+// /// Location distribution view
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct LocationDistributionView {
+//     pub organization_id: Uuid,
+//     pub distributions: Vec<LocationDistribution>,
+//     pub total_locations: usize,
+// }
 
-/// Location distribution entry
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LocationDistribution {
-    pub location_id: Uuid,
-    pub location_name: String,
-    pub member_count: usize,
-    pub percentage: f32,
-}
+// TODO: Location distribution should be handled by composition with cim-domain-location
+// /// Location distribution entry
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct LocationDistribution {
+//     pub location_id: Uuid,
+//     pub location_name: String,
+//     pub member_count: usize,
+//     pub percentage: f32,
+// }
 
 /// Size distribution view
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -271,8 +267,6 @@ mod tests {
             parent_id: None,
             child_units: vec![],
             member_count: 10,
-            location_count: 2,
-            primary_location_name: Some("HQ".to_string()),
             size_category: SizeCategory::Small,
         };
 

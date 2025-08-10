@@ -85,10 +85,11 @@ impl super::CrossDomainResolver for NatsPersonResolver {
         }
     }
     
-    async fn get_location_details(&self, _location_id: Uuid) -> Result<Option<super::LocationDetails>, OrganizationError> {
-        // This resolver only handles Person domain
-        Ok(None)
-    }
+    // TODO: Location details should be handled by composition with cim-domain-location
+    // async fn get_location_details(&self, _location_id: Uuid) -> Result<Option<super::LocationDetails>, OrganizationError> {
+    //     // This resolver only handles Person domain
+    //     Ok(None)
+    // }
     
     async fn get_person_details_batch(&self, person_ids: Vec<Uuid>) -> Result<std::collections::HashMap<Uuid, super::PersonDetails>, OrganizationError> {
         // Create batch request
@@ -121,10 +122,11 @@ impl super::CrossDomainResolver for NatsPersonResolver {
         }
     }
     
-    async fn get_location_details_batch(&self, _location_ids: Vec<Uuid>) -> Result<std::collections::HashMap<Uuid, super::LocationDetails>, OrganizationError> {
-        // This resolver only handles Person domain
-        Ok(std::collections::HashMap::new())
-    }
+    // TODO: Location details should be handled by composition with cim-domain-location
+    // async fn get_location_details_batch(&self, _location_ids: Vec<Uuid>) -> Result<std::collections::HashMap<Uuid, super::LocationDetails>, OrganizationError> {
+    //     // This resolver only handles Person domain
+    //     Ok(std::collections::HashMap::new())
+    // }
 }
 
 /// Event handler for Person domain events

@@ -117,7 +117,7 @@ impl<ES: EventStore> OrganizationCommandHandler<ES> {
         command: CreateOrganization,
     ) -> Result<Vec<OrganizationEvent>, OrganizationError> {
         // Check if organization already exists
-        if let Some(_) = self.repository.load(command.organization_id).await? {
+        if (self.repository.load(command.organization_id).await?).is_some() {
             return Err(OrganizationError::AlreadyExists(command.organization_id));
         }
         

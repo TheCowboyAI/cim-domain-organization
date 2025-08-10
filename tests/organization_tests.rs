@@ -79,7 +79,7 @@ fn test_organization_member_management() {
     org.apply_event(&events[0]).unwrap();
 
     assert_eq!(org.members.len(), 1);
-    assert!(org.members.get(&ceo_id).is_some());
+    assert!(org.members.contains_key(&ceo_id));
 
     // Add CTO reporting to CEO
     let cto_id = Uuid::new_v4();
