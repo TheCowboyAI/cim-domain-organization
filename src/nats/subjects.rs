@@ -907,7 +907,7 @@ mod tests {
     
     #[test]
     fn test_organization_created_subject() {
-        let org_id = Uuid::new_v4();
+        let org_id = Uuid::now_v7();
         let subject = OrganizationSubject::organization_created(org_id);
         let subject_string = subject.to_subject_string();
         
@@ -917,8 +917,8 @@ mod tests {
     
     #[test]
     fn test_department_subject_with_context() {
-        let org_id = Uuid::new_v4();
-        let dept_id = Uuid::new_v4();
+        let org_id = Uuid::now_v7();
+        let dept_id = Uuid::now_v7();
         let subject = OrganizationSubject::department_created(org_id, dept_id)
             .with_context("budget".to_string(), "1000000".to_string());
         
@@ -953,8 +953,8 @@ mod tests {
     
     #[test]
     fn test_complex_workflow_subject() {
-        let org_id = Uuid::new_v4();
-        let workflow_id = Uuid::new_v4();
+        let org_id = Uuid::now_v7();
+        let workflow_id = Uuid::now_v7();
         let subject = OrganizationSubject::onboarding_workflow_started(org_id, workflow_id)
             .with_context("employee_type".to_string(), "full_time".to_string())
             .with_context("department".to_string(), "engineering".to_string());
