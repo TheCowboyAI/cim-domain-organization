@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.0] - 2025-11-07
 
+### Architecture Philosophy: Domain Boundaries
+
+**Critical Design Decision**: The Organization domain defines **positions** (roles) and **places** (facilities) as organizational concepts, but references actual **people** (Person domain) and **locations** (Location domain) through relationships, not as embedded components.
+
+**What Organization Domain Owns**:
+- Positions/Roles: "VP of Engineering", "Senior Software Engineer"
+- Places/Facilities: "San Francisco Office", "Building 42"
+- Organizational structure: departments, teams, reporting lines
+- Policies, budgets, strategies (organization-specific concepts)
+
+**What Organization Domain References** (via UUIDs):
+- People: `person_id` references from Person domain
+- Locations: `location_id` references from Location domain
+
+**Relationships** (not embeddings):
+- `PersonRoleAssignment { person_id, role_id, effective_date }`
+- `FacilityLocationAssignment { facility_id, location_id }`
+
+This maintains proper domain-driven design boundaries and enables independent domain evolution.
+
 ### Added
 - **Pure Functional Architecture**: Complete conversion to pure functions following Category Theory (CT) and Functional Reactive Programming (FRP) principles
   - `apply_event_pure(&self) → Result<Self>` method for pure event application
