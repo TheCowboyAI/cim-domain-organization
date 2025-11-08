@@ -246,94 +246,192 @@ graph TB
 
 ## Usage Examples
 
+> **Domain Boundary Note**: The Organization domain defines **positions** and **places** but references actual **people** (from Person domain) and **locations** (from Location domain) through relationships, not internal components.
+
 ### Basic Organization Creation
 
 ```rust
 use cim_domain_organization::prelude::*;
-use chrono::{DateTime, Utc, NaiveDate};
+use chrono::NaiveDate;
 use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut handler = OrganizationCommandHandler::new();
-    
-    // Create an organization
-    let org_id = EntityId::new();
-    
-    let create_command = CreateOrganization::new(
-        org_id,
-        "Acme Corporation".to_string(),
-        "Acme Corporation Inc.".to_string(),
-    )
-    .with_organization_type(OrganizationType::Corporation)
-    .with_industry(Industry::Technology)
-    .with_size(OrganizationSize::Medium)
-    .with_headquarters(Location {
-        address: "123 Tech Street".to_string(),
-        city: "San Francisco".to_string(),
-        state: "CA".to_string(),
-        country: "US".to_string(),
-        postal_code: "94105".to_string(),
-    })
-    .with_founding_date(NaiveDate::from_ymd_opt(2020, 1, 15).unwrap())
-    .with_initial_budget(Money::new(10_000_000, Currency::USD));
-    
-    let events = handler.handle_create_organization(create_command).await?;
-    println!("Created organization with {} events", events.len());
-    
+    // Create an organization (domain-pure)
+    let org_id = Uuid::now_v7();
+
+    let create_command = CreateOrganization {
+        organization_id: org_id,
+        name: "Acme Corporation".to_string(),
+        legal_name: "Acme Corporation Inc.".to_string(),
+        organization_type: OrganizationType::Corporation,
+        industry: Industry::Technology,
+        founding_date: NaiveDate::from_ymd_opt(2020, 1, 15).unwrap(),
+        // References to other domains via IDs
+        headquarters_location_id: None, // Will be set via relationship
+    };
+
+    // Send command via NATS
+    nats_client
+        .publish("organization.commands.create", serde_json::to_vec(&create_command)?)
+        .await?;
+
+    // Listen for OrganizationCreated event
+    println!("Organization created: {}", org_id);
+
     Ok(())
 }
 ```
 
-### Department Structure Management
+### Defining Organizational Structure (Positions and Places)
 
 ```rust
 use cim_domain_organization::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let department_service = DefaultDepartmentService::new();
-    let org_id = EntityId::new();
-    
-    // Create engineering department
-    let engineering_dept = Department::new(
-        org_id,
-        "Engineering".to_string(),
-        "Software development and engineering operations".to_string(),
-        DepartmentType::Operational,
-    )
-    .with_head_of_department(PersonId::new(), "VP of Engineering".to_string())
-    .with_budget_allocation(BudgetAllocation::new(5_000_000, Currency::USD))
-    .with_location("San Francisco HQ".to_string())
-    .with_objectives(vec![
-        "Deliver high-quality software products".to_string(),
-        "Maintain 99.9% system uptime".to_string(),
-        "Scale engineering team by 50%".to_string(),
-    ]);
-    
-    let dept_result = department_service
-        .create_department(engineering_dept)
-        .await?;
-        
-    println!("Department created: {}", dept_result.department_id);
-    
-    // Create sub-teams
-    let platform_team = Team::new(
-        dept_result.department_id,
-        "Platform Engineering Team".to_string(),
-        TeamType::Permanent,
-    )
-    .with_purpose("Build and maintain core platform infrastructure".to_string())
-    .with_team_lead(PersonId::new(), "Senior Engineering Manager".to_string())
-    .with_target_size(8)
-    .with_budget(Money::new(1_200_000, Currency::USD));
-    
-    let team_result = department_service
-        .form_team(platform_team)
-        .await?;
-        
-    println!("Team formed: {}", team_result.team_id);
-    
+    let org_id = Uuid::now_v7();
+
+    // Define a POSITION (organization domain concept)
+    let create_position_cmd = CreateRole {
+        organization_id: org_id,
+        role_id: Uuid::now_v7(),
+        title: "VP of Engineering".to_string(),
+        role_type: RoleType::Leadership,
+        department: Some("Engineering".to_string()),
+        responsibilities: vec![
+            "Lead engineering strategy".to_string(),
+            "Manage engineering teams".to_string(),
+            "Drive technical excellence".to_string(),
+        ],
+        required_qualifications: vec![
+            "10+ years engineering experience".to_string(),
+            "5+ years leadership experience".to_string(),
+        ],
+        reports_to: None, // Will reference another position/role
+        // NO person data here - that's a relationship!
+    };
+
+    // Define a PLACE (organization domain concept)
+    let create_place_cmd = CreateFacility {
+        organization_id: org_id,
+        facility_id: Uuid::now_v7(),
+        name: "San Francisco Engineering Office".to_string(),
+        facility_type: FacilityType::Office,
+        capacity: Some(150), // Number of workstations
+        purpose: "Primary engineering and product development hub".to_string(),
+        // References location via ID (from Location domain)
+        location_id: None, // Set via relationship to Location domain
+    };
+
+    // Assign a PERSON to a POSITION (relationship, not embedding)
+    let assign_person_cmd = AssignMemberToRole {
+        organization_id: org_id,
+        role_id: vp_engineering_role_id,
+        person_id: jane_smith_id, // Reference to Person domain
+        effective_date: Utc::now(),
+        employment_type: EmploymentType::FullTime,
+    };
+
+    // Associate a PLACE with a LOCATION (relationship, not embedding)
+    let associate_location_cmd = AssociateFacilityWithLocation {
+        organization_id: org_id,
+        facility_id: sf_office_id,
+        location_id: sf_downtown_location_id, // Reference to Location domain
+    };
+
+    println!("Organizational structure defined with clean domain boundaries");
+
+    Ok(())
+}
+```
+
+### Department and Team Structure
+
+```rust
+use cim_domain_organization::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let org_id = Uuid::now_v7();
+
+    // Create a department (organization domain)
+    let create_dept_cmd = CreateDepartment {
+        organization_id: org_id,
+        department_id: Uuid::now_v7(),
+        name: "Engineering".to_string(),
+        description: "Software development and engineering operations".to_string(),
+        department_type: DepartmentType::Operational,
+        budget_amount: 5_000_000.0,
+        budget_currency: Currency::USD,
+        objectives: vec![
+            "Deliver high-quality software products".to_string(),
+            "Maintain 99.9% system uptime".to_string(),
+            "Scale engineering capabilities by 50%".to_string(),
+        ],
+    };
+
+    // Create a leadership POSITION for the department
+    let dept_head_position = CreateRole {
+        organization_id: org_id,
+        role_id: Uuid::now_v7(),
+        title: "Head of Engineering".to_string(),
+        role_type: RoleType::DepartmentHead,
+        department: Some("Engineering".to_string()),
+        responsibilities: vec![
+            "Department strategy and execution".to_string(),
+            "Budget management".to_string(),
+            "Team development".to_string(),
+        ],
+        required_qualifications: vec![
+            "15+ years engineering experience".to_string(),
+            "Proven leadership at scale".to_string(),
+        ],
+        reports_to: Some(cto_role_id), // References another position
+    };
+
+    // Form a team within the department
+    let create_team_cmd = FormTeam {
+        organization_id: org_id,
+        department_id: engineering_dept_id,
+        team_id: Uuid::now_v7(),
+        name: "Platform Engineering".to_string(),
+        team_type: TeamType::Permanent,
+        purpose: "Build and maintain core platform infrastructure".to_string(),
+        target_size: 8,
+        budget_allocation: 1_200_000.0,
+    };
+
+    // Define team POSITIONS (not people!)
+    let team_positions = vec![
+        CreateRole {
+            role_id: Uuid::now_v7(),
+            title: "Platform Team Lead".to_string(),
+            role_type: RoleType::TeamLead,
+            department: Some("Engineering".to_string()),
+            team: Some("Platform Engineering".to_string()),
+            responsibilities: vec!["Team coordination".to_string(), "Technical leadership".to_string()],
+            required_qualifications: vec!["8+ years experience".to_string()],
+            reports_to: Some(head_of_engineering_role_id),
+        },
+        CreateRole {
+            role_id: Uuid::now_v7(),
+            title: "Senior Platform Engineer".to_string(),
+            role_type: RoleType::IndividualContributor,
+            department: Some("Engineering".to_string()),
+            team: Some("Platform Engineering".to_string()),
+            responsibilities: vec!["Infrastructure design".to_string(), "System reliability".to_string()],
+            required_qualifications: vec!["5+ years experience".to_string()],
+            reports_to: Some(team_lead_role_id),
+        },
+    ];
+
+    // LATER: Assign actual people to these positions via relationships
+    // This happens in a separate command that creates the relationship
+
+    println!("Department and team structure defined");
+    println!("Positions created - ready for person assignments");
+
     Ok(())
 }
 ```
@@ -674,6 +772,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Organization Components
 
+> **Domain Purity**: Organization components define **positions** (roles), **places** (facilities), and **organizational structure**. They reference people and locations via IDs, never embed them.
+
 ### OrganizationInfoComponent
 
 Core organizational identity and legal information:
@@ -686,14 +786,19 @@ pub struct OrganizationInfoComponent {
     pub industry: Industry,
     pub size: OrganizationSize,
     pub founding_date: DateTime<Utc>,
-    pub headquarters: Location,
+
+    // References to other domains
+    pub headquarters_location_id: Option<Uuid>, // Location domain reference
     pub registration_details: RegistrationDetails,
-    
-    // Financial summary
+
+    // Financial summary (organization-specific)
     pub annual_revenue: Option<Money>,
     pub annual_budget: Option<Money>,
-    pub employee_count: u32,
-    
+
+    // Organizational metrics (NOT person data)
+    pub position_count: u32,      // Number of defined positions
+    pub filled_position_count: u32, // How many have assigned people
+
     // Status and lifecycle
     pub status: OrganizationStatus,
     pub lifecycle_stage: LifecycleStage,
@@ -702,26 +807,53 @@ pub struct OrganizationInfoComponent {
 
 ### StructureComponent
 
-Organizational hierarchy and reporting relationships:
+Organizational hierarchy with positions and facilities:
 
 ```rust
 pub struct StructureComponent {
+    // Organizational units
     pub departments: Vec<Department>,
     pub teams: Vec<Team>,
-    pub roles: Vec<Role>,
-    pub reporting_lines: Vec<ReportingLine>,
+
+    // POSITIONS (not people!) - organization domain owns these
+    pub roles: Vec<Role>,  // VP Engineering, Senior Engineer, etc.
+    pub reporting_lines: Vec<ReportingLine>, // Position A reports to Position B
+
+    // PLACES (not locations!) - organization domain owns these
+    pub facilities: Vec<Facility>, // "SF Office", "NYC Warehouse", etc.
+
+    // Structure visualization
     pub organizational_chart: OrganizationalChart,
     pub governance_model: GovernanceModel,
     pub decision_matrix: DecisionMatrix,
 }
 
 impl StructureComponent {
+    /// Get position hierarchy (not people!)
     pub fn get_hierarchy(&self) -> OrganizationalHierarchy;
+
+    /// Find reporting chain for a position (returns positions, not people)
     pub fn find_reporting_chain(&self, role_id: Uuid) -> Vec<Role>;
-    pub fn calculate_span_of_control(&self, manager_id: Uuid) -> u32;
+
+    /// Calculate span of control for a position
+    pub fn calculate_span_of_control(&self, manager_role_id: Uuid) -> u32;
+
+    /// Validate structure consistency
     pub fn validate_structure_consistency(&self) -> StructureValidationResult;
 }
 ```
+
+### Key Domain Concepts
+
+**Positions vs People**:
+- `Role` = A position in the organization ("VP of Engineering")
+- `Person` = An actual human (from Person domain)
+- Relationship: `PersonRoleAssignment { person_id, role_id, effective_date }`
+
+**Places vs Locations**:
+- `Facility` = An organizational place ("San Francisco Office", "Building 42")
+- `Location` = Physical address (from Location domain)
+- Relationship: `FacilityLocationAssignment { facility_id, location_id }`
 
 ### ResourceComponent
 
