@@ -10,6 +10,7 @@ pub mod aggregate;
 pub mod nats;
 pub mod ports;
 pub mod adapters;
+pub mod infrastructure;
 
 // Re-export main types
 pub use entity::{Organization, Department, Team, Role, OrganizationUnit, OrganizationType, OrganizationStatus};
@@ -45,6 +46,9 @@ pub enum OrganizationError {
 
     #[error("Team not found: {0}")]
     TeamNotFound(uuid::Uuid),
+
+    #[error("Entity not found: {0}")]
+    EntityNotFound(String),
 
     #[error("Invalid organizational structure: {0}")]
     InvalidStructure(String),

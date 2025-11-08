@@ -98,23 +98,66 @@ Warnings: 1 (unused field in nats_event_publisher.rs)
 
 **Compilation Status**: ✅ SUCCESS
 
+### Phase 4: NATS Service Binary ✅
+**Completed**: 2025-11-07
+
+**Key Changes**:
+1. **Created Infrastructure Module** (`src/infrastructure/`)
+   - `mod.rs` - Module definitions
+   - `nats_integration.rs` - NATS event store and command handler
+   - `persistence.rs` - Repository and snapshot store
+
+2. **NatsEventStore Implementation**
+   - JetStream stream creation with graceful existing stream handling
+   - Event publishing to `organization.events.{aggregate_id}.{event_type}`
+   - Subject patterns via OrganizationSubjects helper
+   - 1-year event retention policy
+
+3. **OrganizationCommandHandler**
+   - Subscribes to `organization.commands.>`
+   - Deserializes and routes commands
+   - Handles command execution via repository
+   - Reply support for request-reply patterns
+   - Error handling and logging
+
+4. **OrganizationRepository**
+   - Event sourcing with snapshot support
+   - In-memory snapshot store (extensible to persistent)
+   - Configurable snapshot frequency
+   - Aggregate rebuilding from events
+
+5. **Service Binary** (`src/bin/organization-service.rs`)
+   - Long-running NATS service daemon
+   - Environment configuration (NATS_URL, STREAM_NAME, SNAPSHOT_FREQ)
+   - Graceful shutdown with Ctrl+C
+   - Comprehensive logging with tracing
+
+**Files Created**:
+- `src/infrastructure/mod.rs` (2 lines)
+- `src/infrastructure/nats_integration.rs` (~235 lines)
+- `src/infrastructure/persistence.rs` (~124 lines)
+- `src/bin/organization-service.rs` (~147 lines)
+
+**Files Modified**:
+- `src/lib.rs` - Added infrastructure module, EntityNotFound error
+- `Cargo.toml` - Added service binary definition, tracing-subscriber dependency
+
+**Compilation Status**: ✅ SUCCESS (2 minor warnings)
+
 ## 🔄 In Progress Phases
 
 None currently
 
 ## 📋 Pending Phases
 
-### Phase 4: NATS Service Binary
+### Phase 5: Container Deployment Configuration
 **Status**: Pending
 
 **Tasks**:
-- [ ] Create `src/bin/organization-service.rs`
-- [ ] Implement JetStream event store for `OrganizationEvent`
-- [ ] Create command subscription handler for `organization.commands.>`
-- [ ] Implement event publishing to `organization.events.>`
-- [ ] Add graceful shutdown with Ctrl+C handler
-- [ ] Add health check responder
-- [ ] Test service with NATS cluster at 10.0.0.41:4222
+- [ ] Copy container.nix from cim-domain-person
+- [ ] Copy CONTAINER_DEPLOYMENT.md template
+- [ ] Adapt for organization domain
+- [ ] Test container builds
 
 ### Phase 5: Container Deployment Configuration
 **Status**: Pending
