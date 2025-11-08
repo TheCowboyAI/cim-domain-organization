@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "cim-domain-organization"
-version = "0.3.0"
+version = "0.7.8"
 dependencies = [
  "async-nats",
  "async-trait",

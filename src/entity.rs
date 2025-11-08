@@ -46,6 +46,7 @@ pub enum OrganizationType {
 /// Organization status
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum OrganizationStatus {
+    Pending,
     Active,
     Inactive,
     Suspended,

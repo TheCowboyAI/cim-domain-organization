@@ -24,6 +24,13 @@ use crate::{
 /// The Organization entity is the aggregate root
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrganizationAggregate {
+    pub id: Uuid,
+    pub name: String,
+    pub org_type: OrganizationType,
+    pub status: OrganizationStatus,
+    pub members: HashMap<Uuid, OrganizationMember>,
+    pub locations: HashMap<Uuid, OrganizationLocation>,
+    pub child_organizations: HashMap<Uuid, ChildOrganization>,
     pub organization: Option<Organization>,  // The root entity
     pub departments: HashMap<EntityId<Department>, Department>,
     pub teams: HashMap<EntityId<Team>, Team>,
@@ -31,11 +38,213 @@ pub struct OrganizationAggregate {
     pub version: u64,
 }
 
-impl OrganizationAggregate {
-    /// Create a new aggregate
-    pub fn new() -> Self {
+/// Child organization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChildOrganization {
+    pub id: Uuid,
+    pub name: String,
+    pub org_type: OrganizationType,
+    pub added_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Organization member
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrganizationMember {
+    pub id: Uuid,
+    pub person_id: Uuid,
+    pub role: OrganizationRole,
+    pub department_id: Option<Uuid>,
+    pub joined_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Organization role
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrganizationRole {
+    pub title: String,
+    pub level: RoleLevel,
+    pub reports_to: Option<Uuid>,
+}
+
+impl OrganizationRole {
+    pub fn ceo() -> Self {
         Self {
+            title: "CEO".to_string(),
+            level: RoleLevel::Executive,
+            reports_to: None,
+        }
+    }
+
+    pub fn software_engineer() -> Self {
+        Self {
+            title: "Software Engineer".to_string(),
+            level: RoleLevel::Mid,
+            reports_to: None,
+        }
+    }
+
+    pub fn manager() -> Self {
+        Self {
+            title: "Manager".to_string(),
+            level: RoleLevel::Senior,
+            reports_to: None,
+        }
+    }
+
+    pub fn director() -> Self {
+        Self {
+            title: "Director".to_string(),
+            level: RoleLevel::Executive,
+            reports_to: None,
+        }
+    }
+
+    pub fn engineering_manager() -> Self {
+        Self {
+            title: "Engineering Manager".to_string(),
+            level: RoleLevel::Senior,
+            reports_to: None,
+        }
+    }
+
+    /// Check if this role has a specific permission
+    pub fn has_permission(&self, permission: &Permission) -> bool {
+        match self.level {
+            RoleLevel::Executive => true, // Executives have all permissions
+            RoleLevel::Senior => match permission {
+                Permission::CreateOrganization => false,
+                Permission::DeleteOrganization => false,
+                Permission::ViewOrganization => true,
+                Permission::ApproveBudget => true,
+                Permission::HireEmployees => true,
+                Permission::ManageTeam => true,
+                Permission::DevelopSoftware => true,
+                Permission::ViewReports => true,
+                Permission::AddMember => true,
+                Permission::UpdateMemberRole => true,
+                Permission::RemoveMember => false,
+            },
+            RoleLevel::Mid => match permission {
+                Permission::CreateOrganization => false,
+                Permission::DeleteOrganization => false,
+                Permission::ViewOrganization => true,
+                Permission::ApproveBudget => false,
+                Permission::HireEmployees => false,
+                Permission::ManageTeam => true,
+                Permission::DevelopSoftware => true,
+                Permission::ViewReports => true,
+                Permission::AddMember => false,
+                Permission::UpdateMemberRole => false,
+                Permission::RemoveMember => false,
+            },
+            RoleLevel::Junior => match permission {
+                Permission::CreateOrganization => false,
+                Permission::DeleteOrganization => false,
+                Permission::ViewOrganization => true,
+                Permission::ApproveBudget => false,
+                Permission::HireEmployees => false,
+                Permission::ManageTeam => false,
+                Permission::DevelopSoftware => true,
+                Permission::ViewReports => true,
+                Permission::AddMember => false,
+                Permission::UpdateMemberRole => false,
+                Permission::RemoveMember => false,
+            },
+            RoleLevel::Intern => match permission {
+                Permission::CreateOrganization => false,
+                Permission::DeleteOrganization => false,
+                Permission::ViewOrganization => true,
+                Permission::ApproveBudget => false,
+                Permission::HireEmployees => false,
+                Permission::ManageTeam => false,
+                Permission::DevelopSoftware => true,
+                Permission::ViewReports => false,
+                Permission::AddMember => false,
+                Permission::UpdateMemberRole => false,
+                Permission::RemoveMember => false,
+            },
+        }
+    }
+}
+
+/// Role level
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RoleLevel {
+    Executive,
+    Senior,
+    Mid,
+    Junior,
+    Intern,
+}
+
+/// Permissions that can be assigned to roles
+#[derive(Debug, Clone, PartialEq)]
+pub enum Permission {
+    CreateOrganization,
+    DeleteOrganization,
+    ViewOrganization,
+    ApproveBudget,
+    HireEmployees,
+    ManageTeam,
+    DevelopSoftware,
+    ViewReports,
+    AddMember,
+    UpdateMemberRole,
+    RemoveMember,
+}
+
+/// Organization location
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrganizationLocation {
+    pub id: Uuid,
+    pub name: String,
+    pub address: String,
+    pub is_primary: bool,
+}
+
+impl OrganizationAggregate {
+    /// Create an empty aggregate (used when creating organization via command)
+    pub fn empty() -> Self {
+        Self {
+            id: Uuid::now_v7(),
+            name: String::new(),
+            org_type: OrganizationType::Corporation,
+            status: OrganizationStatus::Pending,
+            members: HashMap::new(),
+            locations: HashMap::new(),
+            child_organizations: HashMap::new(),
             organization: None,
+            departments: HashMap::new(),
+            teams: HashMap::new(),
+            roles: HashMap::new(),
+            version: 0,
+        }
+    }
+
+    /// Create a new aggregate with organization details
+    pub fn new(id: Uuid, name: String, org_type: OrganizationType) -> Self {
+        let org = Organization {
+            id: EntityId::from_uuid(id),
+            name: name.clone(),
+            display_name: name.clone(),
+            description: None,
+            parent_id: None,
+            organization_type: org_type.clone(),
+            status: OrganizationStatus::Pending,
+            founded_date: None,
+            metadata: serde_json::Value::Object(serde_json::Map::new()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        Self {
+            id,
+            name,
+            org_type,
+            status: OrganizationStatus::Pending,
+            members: HashMap::new(),
+            locations: HashMap::new(),
+            child_organizations: HashMap::new(),
+            organization: Some(org),
             departments: HashMap::new(),
             teams: HashMap::new(),
             roles: HashMap::new(),
@@ -46,6 +255,13 @@ impl OrganizationAggregate {
     /// Create aggregate with existing organization
     pub fn from_organization(org: Organization) -> Self {
         Self {
+            id: org.id.clone().into(),
+            name: org.name.clone(),
+            org_type: org.organization_type.clone(),
+            status: org.status.clone(),
+            members: HashMap::new(),
+            locations: HashMap::new(),
+            child_organizations: HashMap::new(),
             organization: Some(org),
             departments: HashMap::new(),
             teams: HashMap::new(),
@@ -78,11 +294,26 @@ impl OrganizationAggregate {
             OrganizationCommand::AssignRole(cmd) => self.handle_assign_role(cmd),
             OrganizationCommand::VacateRole(cmd) => self.handle_vacate_role(cmd),
             OrganizationCommand::DeprecateRole(cmd) => self.handle_deprecate_role(cmd),
+            // Member management
+            OrganizationCommand::AddMember(cmd) => self.handle_add_member(cmd),
+            OrganizationCommand::UpdateMemberRole(cmd) => self.handle_update_member_role(cmd),
+            OrganizationCommand::RemoveMember(cmd) => self.handle_remove_member(cmd),
+            OrganizationCommand::ChangeReportingRelationship(cmd) => self.handle_change_reporting_relationship(cmd),
+            // Location management
+            OrganizationCommand::AddLocation(cmd) => self.handle_add_location(cmd),
+            OrganizationCommand::ChangePrimaryLocation(cmd) => self.handle_change_primary_location(cmd),
+            OrganizationCommand::RemoveLocation(cmd) => self.handle_remove_location(cmd),
+            // Hierarchy
+            OrganizationCommand::AddChildOrganization(cmd) => self.handle_add_child_organization(cmd),
+            OrganizationCommand::RemoveChildOrganization(cmd) => self.handle_remove_child_organization(cmd),
+            // Status
+            OrganizationCommand::ChangeOrganizationStatus(cmd) => self.handle_change_organization_status(cmd),
         }
     }
 
-    /// Apply an event to update aggregate state
-    pub fn apply_event(&mut self, event: &OrganizationEvent) {
+    /// Apply an event to create new aggregate state (pure function)
+    pub fn apply_event_pure(&self, event: &OrganizationEvent) -> OrganizationResult<Self> {
+        let mut new_aggregate = self.clone();
         match event {
             OrganizationEvent::OrganizationCreated(e) => {
                 let org = Organization {
@@ -98,10 +329,11 @@ impl OrganizationAggregate {
                     created_at: e.occurred_at,
                     updated_at: e.occurred_at,
                 };
-                self.organization = Some(org);
+                new_aggregate.organization = Some(org);
+                new_aggregate.status = OrganizationStatus::Active;
             }
             OrganizationEvent::OrganizationUpdated(e) => {
-                if let Some(org) = &mut self.organization {
+                if let Some(org) = &mut new_aggregate.organization {
                     if let Some(name) = &e.changes.name {
                         org.name = name.clone();
                     }
@@ -130,7 +362,7 @@ impl OrganizationAggregate {
                     created_at: e.occurred_at,
                     updated_at: e.occurred_at,
                 };
-                self.departments.insert(e.department_id.clone(), dept);
+                new_aggregate.departments.insert(e.department_id.clone(), dept);
             }
             OrganizationEvent::TeamFormed(e) => {
                 let team = Team {
@@ -146,7 +378,7 @@ impl OrganizationAggregate {
                     created_at: e.occurred_at,
                     updated_at: e.occurred_at,
                 };
-                self.teams.insert(e.team_id.clone(), team);
+                new_aggregate.teams.insert(e.team_id.clone(), team);
             }
             OrganizationEvent::RoleCreated(e) => {
                 let role = Role {
@@ -166,13 +398,93 @@ impl OrganizationAggregate {
                     created_at: e.occurred_at,
                     updated_at: e.occurred_at,
                 };
-                self.roles.insert(e.role_id.clone(), role);
+                new_aggregate.roles.insert(e.role_id.clone(), role);
+            }
+            OrganizationEvent::MemberAdded(e) => {
+                let member = OrganizationMember {
+                    id: e.person_id,
+                    person_id: e.person_id,
+                    role: e.role.clone(),
+                    department_id: e.department_id,
+                    joined_at: e.occurred_at,
+                };
+                new_aggregate.members.insert(e.person_id, member);
+            }
+            OrganizationEvent::LocationAdded(e) => {
+                let location = OrganizationLocation {
+                    id: e.location_id,
+                    name: e.name.clone(),
+                    address: e.address.clone(),
+                    is_primary: e.is_primary,
+                };
+                new_aggregate.locations.insert(e.location_id, location);
+            }
+            OrganizationEvent::OrganizationStatusChanged(e) => {
+                new_aggregate.status = e.new_status.clone();
+                if let Some(org) = &mut new_aggregate.organization {
+                    org.status = e.new_status.clone();
+                }
+            }
+            OrganizationEvent::MemberRoleUpdated(e) => {
+                if let Some(member) = new_aggregate.members.get_mut(&e.person_id) {
+                    member.role = e.new_role.clone();
+                }
+            }
+            OrganizationEvent::MemberRemoved(e) => {
+                new_aggregate.members.remove(&e.person_id);
+            }
+            OrganizationEvent::ReportingRelationshipChanged(e) => {
+                if let Some(subordinate) = new_aggregate.members.get_mut(&e.person_id) {
+                    subordinate.role.reports_to = e.new_manager_id;
+                }
+            }
+            OrganizationEvent::PrimaryLocationChanged(e) => {
+                // Update all locations to set the new primary
+                for (id, location) in new_aggregate.locations.iter_mut() {
+                    location.is_primary = *id == e.new_primary_location_id;
+                }
+            }
+            OrganizationEvent::LocationRemoved(e) => {
+                new_aggregate.locations.remove(&e.location_id);
+            }
+            OrganizationEvent::OrganizationDissolved(_e) => {
+                new_aggregate.status = OrganizationStatus::Dissolved;
+                if let Some(org) = &mut new_aggregate.organization {
+                    org.status = OrganizationStatus::Dissolved;
+                }
+            }
+            OrganizationEvent::OrganizationMerged(_e) => {
+                new_aggregate.status = OrganizationStatus::Merged;
+                if let Some(org) = &mut new_aggregate.organization {
+                    org.status = OrganizationStatus::Merged;
+                }
+            }
+            OrganizationEvent::ChildOrganizationAdded(e) => {
+                let child = ChildOrganization {
+                    id: e.child_organization_id,
+                    name: e.child_name.clone(),
+                    org_type: e.child_type.clone(),
+                    added_at: e.occurred_at,
+                };
+                new_aggregate.child_organizations.insert(e.child_organization_id, child);
+            }
+            OrganizationEvent::ChildOrganizationRemoved(e) => {
+                new_aggregate.child_organizations.remove(&e.child_organization_id);
             }
             // Handle other events...
             _ => {}
         }
 
-        self.version += 1;
+        new_aggregate.version += 1;
+        Ok(new_aggregate)
+    }
+
+    /// Apply an event to update aggregate state (mutable wrapper for compatibility)
+    /// This is a compatibility wrapper - prefer `apply_event_pure` for pure functional approach
+    pub fn apply_event(&mut self, event: &OrganizationEvent) -> OrganizationResult<()> {
+        let new_aggregate = self.apply_event_pure(event)?;
+        *self = new_aggregate;
+        Ok(())
     }
 
     // Command handlers
@@ -240,6 +552,11 @@ impl OrganizationAggregate {
     fn handle_merge_organizations(&mut self, cmd: MergeOrganizations) -> OrganizationResult<Vec<OrganizationEvent>> {
         if self.organization.is_none() {
             return Err(OrganizationError::OrganizationNotFound(cmd.surviving_organization_id.into()));
+        }
+
+        // Check for self-merge
+        if cmd.surviving_organization_id == cmd.merged_organization_id {
+            return Err(OrganizationError::CircularReference("Organization cannot merge with itself".to_string()));
         }
 
         let event = OrganizationMerged {
@@ -482,17 +799,291 @@ impl OrganizationAggregate {
 
         Ok(vec![OrganizationEvent::RoleDeprecated(event)])
     }
+
+    // Member management handlers
+
+    fn handle_add_member(&mut self, cmd: AddMember) -> OrganizationResult<Vec<OrganizationEvent>> {
+        // Check if member already exists
+        if self.members.contains_key(&cmd.person_id) {
+            return Err(OrganizationError::DuplicateEntity(format!("Member {} already exists", cmd.person_id)));
+        }
+
+        // Create the MemberAdded event
+        let event = crate::events::MemberAdded {
+            event_id: Uuid::now_v7(),
+            identity: cmd.identity,
+            organization_id: EntityId::from_uuid(cmd.organization_id),
+            person_id: cmd.person_id,
+            role: cmd.role,
+            department_id: cmd.department_id,
+            occurred_at: Utc::now(),
+        };
+
+        Ok(vec![OrganizationEvent::MemberAdded(event)])
+    }
+
+    fn handle_update_member_role(&mut self, cmd: UpdateMemberRole) -> OrganizationResult<Vec<OrganizationEvent>> {
+        // Check if member exists
+        let member = self.members.get(&cmd.person_id)
+            .ok_or_else(|| OrganizationError::OrganizationNotFound(cmd.person_id))?;
+
+        // Create event with previous role for history tracking
+        let event = crate::events::MemberRoleUpdated {
+            event_id: Uuid::now_v7(),
+            identity: cmd.identity,
+            organization_id: EntityId::from_uuid(cmd.organization_id),
+            person_id: cmd.person_id,
+            new_role: cmd.new_role.clone(),
+            previous_role: member.role.clone(),
+            occurred_at: Utc::now(),
+        };
+
+        Ok(vec![OrganizationEvent::MemberRoleUpdated(event)])
+    }
+
+    fn handle_remove_member(&mut self, cmd: RemoveMember) -> OrganizationResult<Vec<OrganizationEvent>> {
+        // Check if member exists
+        if !self.members.contains_key(&cmd.person_id) {
+            return Err(OrganizationError::OrganizationNotFound(cmd.person_id));
+        }
+
+        // Create MemberRemoved event
+        let event = crate::events::MemberRemoved {
+            event_id: Uuid::now_v7(),
+            identity: cmd.identity,
+            organization_id: EntityId::from_uuid(cmd.organization_id),
+            person_id: cmd.person_id,
+            reason: cmd.reason,
+            occurred_at: Utc::now(),
+        };
+
+        Ok(vec![OrganizationEvent::MemberRemoved(event)])
+    }
+
+    fn handle_change_reporting_relationship(&mut self, cmd: ChangeReportingRelationship) -> OrganizationResult<Vec<OrganizationEvent>> {
+        // Check both members exist
+        if !self.members.contains_key(&cmd.subordinate_id) {
+            return Err(OrganizationError::OrganizationNotFound(cmd.subordinate_id));
+        }
+
+        if !self.members.contains_key(&cmd.new_manager_id) {
+            return Err(OrganizationError::OrganizationNotFound(cmd.new_manager_id));
+        }
+
+        // Check for circular reference - the new manager cannot be a direct or indirect subordinate of the subordinate
+        if self.would_create_circular_reference(cmd.subordinate_id, cmd.new_manager_id) {
+            return Err(OrganizationError::CircularReference("Cannot create circular reporting relationship".to_string()));
+        }
+
+        // Get current manager for history
+        let previous_manager = self.members.get(&cmd.subordinate_id)
+            .and_then(|m| m.role.reports_to);
+
+        // Create event
+        let event = crate::events::ReportingRelationshipChanged {
+            event_id: Uuid::now_v7(),
+            identity: cmd.identity,
+            organization_id: EntityId::from_uuid(cmd.organization_id),
+            person_id: cmd.subordinate_id,
+            new_manager_id: Some(cmd.new_manager_id),
+            previous_manager_id: previous_manager,
+            occurred_at: Utc::now(),
+        };
+
+        Ok(vec![OrganizationEvent::ReportingRelationshipChanged(event)])
+    }
+
+    // Location management handlers
+
+    fn handle_add_location(&mut self, cmd: AddLocation) -> OrganizationResult<Vec<OrganizationEvent>> {
+        // Check if location already exists
+        if self.locations.contains_key(&cmd.location_id) {
+            return Err(OrganizationError::DuplicateEntity(format!("Location {} already exists", cmd.location_id)));
+        }
+
+        // Create LocationAdded event
+        let event = crate::events::LocationAdded {
+            event_id: Uuid::now_v7(),
+            identity: cmd.identity,
+            organization_id: EntityId::from_uuid(cmd.organization_id),
+            location_id: cmd.location_id,
+            name: cmd.name,
+            address: cmd.address,
+            is_primary: self.locations.is_empty(), // First location is primary
+            occurred_at: Utc::now(),
+        };
+
+        Ok(vec![OrganizationEvent::LocationAdded(event)])
+    }
+
+    fn handle_change_primary_location(&mut self, cmd: ChangePrimaryLocation) -> OrganizationResult<Vec<OrganizationEvent>> {
+        // Check if location exists
+        if !self.locations.contains_key(&cmd.location_id) {
+            return Err(OrganizationError::OrganizationNotFound(cmd.location_id));
+        }
+
+        // Find the previous primary location
+        let previous_primary = self.locations.iter()
+            .find(|(_, loc)| loc.is_primary)
+            .map(|(id, _)| *id);
+
+        // Create event
+        let event = crate::events::PrimaryLocationChanged {
+            event_id: Uuid::now_v7(),
+            identity: cmd.identity,
+            organization_id: EntityId::from_uuid(cmd.organization_id),
+            new_primary_location_id: cmd.location_id,
+            previous_primary_location_id: previous_primary,
+            occurred_at: Utc::now(),
+        };
+
+        Ok(vec![OrganizationEvent::PrimaryLocationChanged(event)])
+    }
+
+    fn handle_remove_location(&mut self, cmd: RemoveLocation) -> OrganizationResult<Vec<OrganizationEvent>> {
+        // Check if location exists
+        if !self.locations.contains_key(&cmd.location_id) {
+            return Err(OrganizationError::OrganizationNotFound(cmd.location_id));
+        }
+
+        // Create event
+        let event = crate::events::LocationRemoved {
+            event_id: Uuid::now_v7(),
+            identity: cmd.identity,
+            organization_id: EntityId::from_uuid(cmd.organization_id),
+            location_id: cmd.location_id,
+            occurred_at: Utc::now(),
+        };
+
+        Ok(vec![OrganizationEvent::LocationRemoved(event)])
+    }
+
+    // Helper methods
+
+    /// Check if making subordinate report to new_manager would create a circular reference
+    fn would_create_circular_reference(&self, subordinate_id: Uuid, new_manager_id: Uuid) -> bool {
+        // Start from the new manager and traverse up the reporting chain
+        // If we encounter the subordinate, it would create a cycle
+        let mut current_id = new_manager_id;
+        let mut visited = std::collections::HashSet::new();
+
+        while let Some(member) = self.members.get(&current_id) {
+            // Avoid infinite loops in case there's already a cycle
+            if !visited.insert(current_id) {
+                break;
+            }
+
+            // If the new manager reports to the subordinate (directly or indirectly), it's a cycle
+            if current_id == subordinate_id {
+                return true;
+            }
+
+            // Move up the reporting chain
+            if let Some(reports_to) = member.role.reports_to {
+                current_id = reports_to;
+            } else {
+                break;
+            }
+        }
+
+        false
+    }
+
+    // Hierarchy handlers
+
+    fn handle_add_child_organization(&mut self, cmd: AddChildOrganization) -> OrganizationResult<Vec<OrganizationEvent>> {
+        // Check for self-reference (circular reference)
+        if cmd.child_organization_id == self.id {
+            return Err(OrganizationError::CircularReference("Organization cannot be its own child".to_string()));
+        }
+
+        // Check if child organization already exists
+        if self.child_organizations.contains_key(&cmd.child_organization_id) {
+            return Err(OrganizationError::DuplicateEntity(cmd.child_organization_id.to_string()));
+        }
+
+        let event = crate::events::ChildOrganizationAdded {
+            event_id: Uuid::now_v7(),
+            identity: cmd.identity,
+            parent_organization_id: EntityId::from_uuid(self.id),
+            child_organization_id: cmd.child_organization_id,
+            child_name: cmd.child_name,
+            child_type: cmd.child_type,
+            occurred_at: Utc::now(),
+        };
+
+        Ok(vec![OrganizationEvent::ChildOrganizationAdded(event)])
+    }
+
+    fn handle_remove_child_organization(&mut self, cmd: RemoveChildOrganization) -> OrganizationResult<Vec<OrganizationEvent>> {
+        // Check if child organization exists
+        if !self.child_organizations.contains_key(&cmd.child_organization_id) {
+            return Err(OrganizationError::OrganizationNotFound(cmd.child_organization_id));
+        }
+
+        let event = crate::events::ChildOrganizationRemoved {
+            event_id: Uuid::now_v7(),
+            identity: cmd.identity,
+            parent_organization_id: EntityId::from_uuid(self.id),
+            child_organization_id: cmd.child_organization_id,
+            occurred_at: Utc::now(),
+        };
+
+        Ok(vec![OrganizationEvent::ChildOrganizationRemoved(event)])
+    }
+
+    // Status handlers
+
+    fn handle_change_organization_status(&mut self, cmd: ChangeOrganizationStatus) -> OrganizationResult<Vec<OrganizationEvent>> {
+        // Validate status transition
+        if !self.is_valid_status_transition(self.status.clone(), cmd.new_status.clone()) {
+            return Err(OrganizationError::InvalidStructure(
+                format!("Invalid status transition from {:?} to {:?}", self.status, cmd.new_status)
+            ));
+        }
+
+        // Create event
+        let event = crate::events::OrganizationStatusChanged {
+            event_id: Uuid::now_v7(),
+            identity: cmd.identity,
+            organization_id: EntityId::from_uuid(cmd.organization_id),
+            new_status: cmd.new_status.clone(),
+            previous_status: self.status.clone(),
+            reason: cmd.reason,
+            occurred_at: Utc::now(),
+        };
+
+        Ok(vec![OrganizationEvent::OrganizationStatusChanged(event)])
+    }
+
+    /// Check if a status transition is valid
+    fn is_valid_status_transition(&self, from: OrganizationStatus, to: OrganizationStatus) -> bool {
+        use OrganizationStatus::*;
+
+        match (from, to) {
+            // Can't transition to the same status
+            (a, b) if a == b => false,
+            // Pending can transition to Active
+            (Pending, Active) => true,
+            // Active can transition to Inactive, Suspended, Dissolved, or Merged
+            (Active, Inactive) | (Active, Suspended) | (Active, Dissolved) | (Active, Merged) => true,
+            // Inactive can transition back to Active (reactivation)
+            (Inactive, Active) => true,
+            // Suspended can transition to Active (unsuspend) or Dissolved
+            (Suspended, Active) | (Suspended, Dissolved) => true,
+            // Dissolved and Merged are terminal states - no transitions allowed
+            (Dissolved, _) | (Merged, _) => false,
+            // All other transitions are invalid
+            _ => false,
+        }
+    }
 }
 
 impl AggregateRoot for OrganizationAggregate {
     type Id = Uuid;
 
     fn id(&self) -> Self::Id {
-        // Return the Organization's ID if it exists, otherwise a default (this shouldn't happen in practice)
-        self.organization
-            .as_ref()
-            .map(|org| org.id.clone().into())
-            .unwrap_or_else(|| Uuid::nil())
+        self.id
     }
 
     fn version(&self) -> u64 {
@@ -506,6 +1097,10 @@ impl AggregateRoot for OrganizationAggregate {
 
 impl Default for OrganizationAggregate {
     fn default() -> Self {
-        Self::new()
+        Self::new(
+            Uuid::now_v7(),
+            "Default Organization".to_string(),
+            OrganizationType::Corporation,
+        )
     }
 }

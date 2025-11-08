@@ -36,6 +36,20 @@ pub enum OrganizationCommand {
     AssignRole(AssignRole),
     VacateRole(VacateRole),
     DeprecateRole(DeprecateRole),
+    // Member management commands
+    AddMember(AddMember),
+    UpdateMemberRole(UpdateMemberRole),
+    RemoveMember(RemoveMember),
+    ChangeReportingRelationship(ChangeReportingRelationship),
+    // Location management commands
+    AddLocation(AddLocation),
+    ChangePrimaryLocation(ChangePrimaryLocation),
+    RemoveLocation(RemoveLocation),
+    // Hierarchy commands
+    AddChildOrganization(AddChildOrganization),
+    RemoveChildOrganization(RemoveChildOrganization),
+    // Status commands
+    ChangeOrganizationStatus(ChangeOrganizationStatus),
 }
 
 impl Command for OrganizationCommand {
@@ -59,6 +73,20 @@ impl Command for OrganizationCommand {
             OrganizationCommand::AssignRole(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
             OrganizationCommand::VacateRole(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
             OrganizationCommand::DeprecateRole(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
+            // Member management
+            OrganizationCommand::AddMember(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
+            OrganizationCommand::UpdateMemberRole(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
+            OrganizationCommand::RemoveMember(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
+            OrganizationCommand::ChangeReportingRelationship(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
+            // Location management
+            OrganizationCommand::AddLocation(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
+            OrganizationCommand::ChangePrimaryLocation(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
+            OrganizationCommand::RemoveLocation(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
+            // Hierarchy
+            OrganizationCommand::AddChildOrganization(cmd) => Some(EntityId::from_uuid(cmd.parent_organization_id)),
+            OrganizationCommand::RemoveChildOrganization(cmd) => Some(EntityId::from_uuid(cmd.parent_organization_id)),
+            // Status
+            OrganizationCommand::ChangeOrganizationStatus(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
         }
     }
 }
@@ -384,4 +412,102 @@ impl Command for DeprecateRole {
     fn aggregate_id(&self) -> Option<EntityId<Self::Aggregate>> {
         Some(EntityId::from_uuid(self.organization_id.clone().into()))
     }
+}
+
+// Member management commands
+
+/// Command: Add member to organization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddMember {
+    pub identity: MessageIdentity,
+    pub organization_id: Uuid,
+    pub person_id: Uuid,
+    pub role: crate::aggregate::OrganizationRole,
+    pub department_id: Option<Uuid>,
+}
+
+/// Command: Update member role
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateMemberRole {
+    pub identity: MessageIdentity,
+    pub organization_id: Uuid,
+    pub person_id: Uuid,
+    pub new_role: crate::aggregate::OrganizationRole,
+}
+
+/// Command: Remove member from organization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveMember {
+    pub identity: MessageIdentity,
+    pub organization_id: Uuid,
+    pub person_id: Uuid,
+    pub reason: Option<String>,
+}
+
+/// Command: Change reporting relationship
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangeReportingRelationship {
+    pub identity: MessageIdentity,
+    pub organization_id: Uuid,
+    pub subordinate_id: Uuid,
+    pub new_manager_id: Uuid,
+}
+
+// Location management commands
+
+/// Command: Add location to organization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddLocation {
+    pub identity: MessageIdentity,
+    pub organization_id: Uuid,
+    pub location_id: Uuid,
+    pub name: String,
+    pub address: String,
+}
+
+/// Command: Change primary location
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangePrimaryLocation {
+    pub identity: MessageIdentity,
+    pub organization_id: Uuid,
+    pub location_id: Uuid,
+}
+
+/// Command: Remove location from organization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveLocation {
+    pub identity: MessageIdentity,
+    pub organization_id: Uuid,
+    pub location_id: Uuid,
+}
+
+// Hierarchy commands
+
+/// Command: Add child organization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddChildOrganization {
+    pub identity: MessageIdentity,
+    pub parent_organization_id: Uuid,
+    pub child_organization_id: Uuid,
+    pub child_name: String,
+    pub child_type: OrganizationType,
+}
+
+/// Command: Remove child organization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveChildOrganization {
+    pub identity: MessageIdentity,
+    pub parent_organization_id: Uuid,
+    pub child_organization_id: Uuid,
+}
+
+// Status commands
+
+/// Command: Change organization status
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangeOrganizationStatus {
+    pub identity: MessageIdentity,
+    pub organization_id: Uuid,
+    pub new_status: OrganizationStatus,
+    pub reason: Option<String>,
 }
