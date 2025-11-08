@@ -4,14 +4,22 @@
 //!
 //! ```mermaid
 //! graph TD
-//!     A[Create Organization] --> B[Add Members]
-//!     B --> C[Set Reporting Structure]
-//!     C --> D[Add Locations]
-//!     D --> E[Create Child Organizations]
+//!     A[Create Organization] --> B[Create Departments]
+//!     B --> C[Create Teams]
+//!     C --> D[Create Roles/Positions]
+//!     D --> E[Create Facilities/Places]
 //!     E --> F[Test Hierarchy]
 //!     F --> G[Test Status Transitions]
 //!     G --> H[Test Dissolution/Merger]
 //! ```
+//!
+//! ## Domain Purity
+//!
+//! These tests verify that the Organization domain maintains pure boundaries:
+//! - Tests POSITIONS (roles) not PEOPLE
+//! - Tests PLACES (facilities) not LOCATIONS
+//! - No person-role assignments (that's Association domain)
+//! - No facility-location links (that's Association domain)
 
 use cim_domain_organization::*;
 use uuid::Uuid;
@@ -23,10 +31,12 @@ fn test_create_organization_complete_flow() {
 
     // Verify initial state
     assert_eq!(org.status, OrganizationStatus::Pending);
-    assert!(org.members.is_empty());
-    assert!(org.locations.is_empty());
+    assert!(org.departments.is_empty());
+    assert!(org.teams.is_empty());
+    assert!(org.roles.is_empty());
+    assert!(org.facilities.is_empty());
 
-    // Create organization command (using new API structure)
+    // Create organization command
     let message_id = Uuid::now_v7();
     let create_cmd = CreateOrganization {
         identity: MessageIdentity {
@@ -54,115 +64,211 @@ fn test_create_organization_complete_flow() {
 }
 
 #[test]
-fn test_organization_member_management() {
+fn test_department_management() {
     let org_id = Uuid::now_v7();
     let mut org = OrganizationAggregate::new(
         org_id,
-        "Tech Startup".to_string(),
+        "Tech Company".to_string(),
         OrganizationType::Corporation,
     );
     org.status = OrganizationStatus::Active;
 
-    // Add CEO
-    let ceo_id = Uuid::now_v7();
-    let ceo_role = OrganizationRole::ceo();
-
+    // Create Engineering Department
     let message_id = Uuid::now_v7();
-    let add_ceo_cmd = AddMember {
+    let create_dept_cmd = CreateDepartment {
         identity: MessageIdentity {
             correlation_id: cim_domain::CorrelationId::Single(message_id),
             causation_id: cim_domain::CausationId(message_id),
             message_id,
         },
-        organization_id: org_id,
-        person_id: ceo_id,
-        role: ceo_role,
-        department_id: None,
+        organization_id: EntityId::from_uuid(org_id),
+        parent_department_id: None,
+        name: "Engineering".to_string(),
+        code: "ENG".to_string(),
+        description: Some("Engineering department".to_string()),
     };
 
     let events = org
-        .handle_command(OrganizationCommand::AddMember(add_ceo_cmd))
+        .handle_command(OrganizationCommand::CreateDepartment(create_dept_cmd))
         .unwrap();
     org.apply_event(&events[0]).unwrap();
 
-    assert_eq!(org.members.len(), 1);
-    assert!(org.members.contains_key(&ceo_id));
+    assert_eq!(org.departments.len(), 1);
+}
 
-    // Add CTO reporting to CEO
-    let cto_id = Uuid::now_v7();
-    let cto_role = OrganizationRole {
-        title: "CTO".to_string(),
-        level: RoleLevel::Executive,
-        reports_to: Some(ceo_id),
+#[test]
+fn test_team_management() {
+    let org_id = Uuid::now_v7();
+    let mut org = OrganizationAggregate::new(
+        org_id,
+        "Team Test Corp".to_string(),
+        OrganizationType::Corporation,
+    );
+    org.status = OrganizationStatus::Active;
+
+    // Create a team
+    let message_id = Uuid::now_v7();
+    let create_team_cmd = CreateTeam {
+        identity: MessageIdentity {
+            correlation_id: cim_domain::CorrelationId::Single(message_id),
+            causation_id: cim_domain::CausationId(message_id),
+            message_id,
+        },
+        organization_id: EntityId::from_uuid(org_id),
+        department_id: None,
+        name: "Backend Team".to_string(),
+        description: Some("Backend development team".to_string()),
+        team_type: TeamType::Permanent,
+        max_members: Some(10),
     };
 
+    let events = org
+        .handle_command(OrganizationCommand::CreateTeam(create_team_cmd))
+        .unwrap();
+    org.apply_event(&events[0]).unwrap();
+
+    assert_eq!(org.teams.len(), 1);
+}
+
+#[test]
+fn test_role_management() {
+    // Test creating organizational POSITIONS (not assigning people to them)
+    let org_id = Uuid::now_v7();
+    let mut org = OrganizationAggregate::new(
+        org_id,
+        "Role Test Corp".to_string(),
+        OrganizationType::Corporation,
+    );
+    org.status = OrganizationStatus::Active;
+
+    // Create CEO position
+    let message_id = Uuid::now_v7();
+    let create_ceo_cmd = CreateRole {
+        identity: MessageIdentity {
+            correlation_id: cim_domain::CorrelationId::Single(message_id),
+            causation_id: cim_domain::CausationId(message_id),
+            message_id,
+        },
+        organization_id: EntityId::from_uuid(org_id),
+        department_id: None,
+        team_id: None,
+        title: "Chief Executive Officer".to_string(),
+        code: "CEO".to_string(),
+        description: Some("Top executive position".to_string()),
+        role_type: RoleType::Executive,
+        level: Some(10),
+        reports_to: None,
+        permissions: vec!["all".to_string()],
+        responsibilities: vec!["Strategic direction".to_string()],
+    };
+
+    let events = org
+        .handle_command(OrganizationCommand::CreateRole(create_ceo_cmd))
+        .unwrap();
+    org.apply_event(&events[0]).unwrap();
+
+    assert_eq!(org.roles.len(), 1);
+
+    // Get the CEO role ID
+    let ceo_role_id = org.roles.keys().next().unwrap().clone();
+
+    // Create CTO position that reports to CEO
     let message_id2 = Uuid::now_v7();
-    let add_cto_cmd = AddMember {
+    let create_cto_cmd = CreateRole {
         identity: MessageIdentity {
             correlation_id: cim_domain::CorrelationId::Single(message_id2),
             causation_id: cim_domain::CausationId(message_id2),
             message_id: message_id2,
         },
-        organization_id: org_id,
-        person_id: cto_id,
-        role: cto_role,
+        organization_id: EntityId::from_uuid(org_id),
         department_id: None,
+        team_id: None,
+        title: "Chief Technology Officer".to_string(),
+        code: "CTO".to_string(),
+        description: Some("Technology leader".to_string()),
+        role_type: RoleType::Executive,
+        level: Some(9),
+        reports_to: Some(ceo_role_id.clone()),  // ROLE-TO-ROLE hierarchy
+        permissions: vec!["tech_decisions".to_string()],
+        responsibilities: vec!["Technology strategy".to_string()],
     };
 
     let events = org
-        .handle_command(OrganizationCommand::AddMember(add_cto_cmd))
+        .handle_command(OrganizationCommand::CreateRole(create_cto_cmd))
         .unwrap();
     org.apply_event(&events[0]).unwrap();
 
-    assert_eq!(org.members.len(), 2);
-    let cto = org.members.get(&cto_id).unwrap();
-    assert_eq!(cto.role.reports_to, Some(ceo_id));
+    assert_eq!(org.roles.len(), 2);
 
-    // Add Engineering Manager reporting to CTO
-    let eng_mgr_id = Uuid::now_v7();
-    let eng_mgr_role = OrganizationRole {
-        title: "Engineering Manager".to_string(),
-        level: RoleLevel::Senior,
-        reports_to: Some(cto_id),
-    };
+    // Verify the reporting structure is role-to-role
+    let cto_role = org.roles.values().find(|r| r.code == "CTO").unwrap();
+    assert_eq!(cto_role.reports_to, Some(ceo_role_id));
+}
 
-    let message_id3 = Uuid::now_v7();
-    let add_mgr_cmd = AddMember {
-        identity: MessageIdentity {
-            correlation_id: cim_domain::CorrelationId::Single(message_id3),
-            causation_id: cim_domain::CausationId(message_id3),
-            message_id: message_id3,
-        },
-        organization_id: org_id,
-        person_id: eng_mgr_id,
-        role: eng_mgr_role,
-        department_id: None,
-    };
+#[test]
+fn test_facility_management() {
+    // Test creating organizational PLACES (not linking them to addresses)
+    let org_id = Uuid::now_v7();
+    let mut org = OrganizationAggregate::new(
+        org_id,
+        "Facility Test Corp".to_string(),
+        OrganizationType::Corporation,
+    );
+    org.status = OrganizationStatus::Active;
 
-    let events = org
-        .handle_command(OrganizationCommand::AddMember(add_mgr_cmd))
-        .unwrap();
-    org.apply_event(&events[0]).unwrap();
-
-    assert_eq!(org.members.len(), 3);
-
-    // Test circular reporting prevention
+    // Create headquarters facility (NO address data)
     let message_id = Uuid::now_v7();
-    let circular_cmd = ChangeReportingRelationship {
+    let create_hq_cmd = CreateFacility {
         identity: MessageIdentity {
             correlation_id: cim_domain::CorrelationId::Single(message_id),
             causation_id: cim_domain::CausationId(message_id),
             message_id,
         },
-        organization_id: org_id,
-        subordinate_id: ceo_id,
-        new_manager_id: eng_mgr_id,
+        organization_id: EntityId::from_uuid(org_id),
+        name: "Headquarters".to_string(),
+        code: "HQ-001".to_string(),
+        facility_type: FacilityType::Headquarters,
+        description: Some("Main office building".to_string()),
+        capacity: Some(500),
+        parent_facility_id: None,
     };
 
-    let result = org.handle_command(OrganizationCommand::ChangeReportingRelationship(
-        circular_cmd,
-    ));
-    assert!(result.is_err());
+    let events = org
+        .handle_command(OrganizationCommand::CreateFacility(create_hq_cmd))
+        .unwrap();
+    org.apply_event(&events[0]).unwrap();
+
+    assert_eq!(org.facilities.len(), 1);
+
+    // Create warehouse facility
+    let message_id2 = Uuid::now_v7();
+    let create_warehouse_cmd = CreateFacility {
+        identity: MessageIdentity {
+            correlation_id: cim_domain::CorrelationId::Single(message_id2),
+            causation_id: cim_domain::CausationId(message_id2),
+            message_id: message_id2,
+        },
+        organization_id: EntityId::from_uuid(org_id),
+        name: "Main Warehouse".to_string(),
+        code: "WH-001".to_string(),
+        facility_type: FacilityType::Warehouse,
+        description: Some("Primary storage facility".to_string()),
+        capacity: Some(10000),
+        parent_facility_id: None,
+    };
+
+    let events = org
+        .handle_command(OrganizationCommand::CreateFacility(create_warehouse_cmd))
+        .unwrap();
+    org.apply_event(&events[0]).unwrap();
+
+    assert_eq!(org.facilities.len(), 2);
+
+    // Verify facilities have NO address data
+    let hq = org.facilities.values().find(|f| f.code == "HQ-001").unwrap();
+    assert_eq!(hq.facility_type, FacilityType::Headquarters);
+    assert_eq!(hq.capacity, Some(500));
+    // Note: NO address field exists in Facility struct
 }
 
 #[test]
@@ -188,7 +294,7 @@ fn test_organization_hierarchy() {
         parent_organization_id: company_id,
         child_organization_id: division_id,
         child_name: "Tech Division".to_string(),
-        child_type: OrganizationType::Corporation, // Using Corporation as Division doesn't exist
+        child_type: OrganizationType::Corporation,
     };
 
     let events = company
@@ -196,46 +302,15 @@ fn test_organization_hierarchy() {
         .unwrap();
     company.apply_event(&events[0]).unwrap();
 
-    // Note: child_units field doesn't exist in the new aggregate structure
-    // Would need to track this differently
+    assert_eq!(company.child_organizations.len(), 1);
 
-    // Create department under division
-    let dept_id = Uuid::now_v7();
-    let mut division = OrganizationAggregate::new(
-        division_id,
-        "Tech Division".to_string(),
-        OrganizationType::Corporation, // Division type doesn't exist
-    );
-    division.status = OrganizationStatus::Active;
-    // Note: parent_id field doesn't exist in the new aggregate
-
+    // Test self-reference prevention
     let message_id2 = Uuid::now_v7();
-    let add_dept_cmd = AddChildOrganization {
+    let self_ref_cmd = AddChildOrganization {
         identity: MessageIdentity {
             correlation_id: cim_domain::CorrelationId::Single(message_id2),
             causation_id: cim_domain::CausationId(message_id2),
             message_id: message_id2,
-        },
-        parent_organization_id: division_id,
-        child_organization_id: dept_id,
-        child_name: "Engineering Department".to_string(),
-        child_type: OrganizationType::Corporation,
-    };
-
-    let events = division
-        .handle_command(OrganizationCommand::AddChildOrganization(add_dept_cmd))
-        .unwrap();
-    division.apply_event(&events[0]).unwrap();
-
-    // Note: child_units field doesn't exist in the new aggregate
-
-    // Test self-reference prevention
-    let message_id3 = Uuid::now_v7();
-    let self_ref_cmd = AddChildOrganization {
-        identity: MessageIdentity {
-            correlation_id: cim_domain::CorrelationId::Single(message_id3),
-            causation_id: cim_domain::CausationId(message_id3),
-            message_id: message_id3,
         },
         parent_organization_id: company_id,
         child_organization_id: company_id,
@@ -245,114 +320,6 @@ fn test_organization_hierarchy() {
 
     let result = company.handle_command(OrganizationCommand::AddChildOrganization(self_ref_cmd));
     assert!(result.is_err());
-}
-
-#[test]
-fn test_organization_locations() {
-    let org_id = Uuid::now_v7();
-    let mut org = OrganizationAggregate::new(
-        org_id,
-        "Multi-Location Corp".to_string(),
-        OrganizationType::Corporation,
-    );
-    org.status = OrganizationStatus::Active;
-
-    // Add first location (should become primary)
-    let hq_location_id = Uuid::now_v7();
-    let message_id = Uuid::now_v7();
-    let add_hq_cmd = AddLocation {
-        identity: MessageIdentity {
-            correlation_id: cim_domain::CorrelationId::Single(message_id),
-            causation_id: cim_domain::CausationId(message_id),
-            message_id,
-        },
-        organization_id: org_id,
-        location_id: hq_location_id,
-        name: "Headquarters".to_string(),
-        address: "123 Main St, City, State".to_string(),
-    };
-
-    let events = org
-        .handle_command(OrganizationCommand::AddLocation(add_hq_cmd))
-        .unwrap();
-    org.apply_event(&events[0]).unwrap();
-
-    assert_eq!(org.locations.len(), 1);
-    // Check if the location is primary (first location becomes primary automatically)
-    let hq_location = org.locations.get(&hq_location_id).unwrap();
-    assert!(hq_location.is_primary);
-
-    // Add second location
-    let branch_location_id = Uuid::now_v7();
-    let message_id2 = Uuid::now_v7();
-    let add_branch_cmd = AddLocation {
-        identity: MessageIdentity {
-            correlation_id: cim_domain::CorrelationId::Single(message_id2),
-            causation_id: cim_domain::CausationId(message_id2),
-            message_id: message_id2,
-        },
-        organization_id: org_id,
-        location_id: branch_location_id,
-        name: "Branch Office".to_string(),
-        address: "456 Oak Ave, City, State".to_string(),
-    };
-
-    let events = org
-        .handle_command(OrganizationCommand::AddLocation(add_branch_cmd))
-        .unwrap();
-    org.apply_event(&events[0]).unwrap();
-
-    assert_eq!(org.locations.len(), 2);
-    // Check that HQ is still primary
-    let hq_location = org.locations.get(&hq_location_id).unwrap();
-    assert!(hq_location.is_primary);
-
-    // Change primary location
-    let message_id3 = Uuid::now_v7();
-    let change_primary_cmd = ChangePrimaryLocation {
-        identity: MessageIdentity {
-            correlation_id: cim_domain::CorrelationId::Single(message_id3),
-            causation_id: cim_domain::CausationId(message_id3),
-            message_id: message_id3,
-        },
-        organization_id: org_id,
-        location_id: branch_location_id,
-    };
-
-    let events = org
-        .handle_command(OrganizationCommand::ChangePrimaryLocation(
-            change_primary_cmd,
-        ))
-        .unwrap();
-    org.apply_event(&events[0]).unwrap();
-
-    // Check that branch is now primary
-    let branch_location = org.locations.get(&branch_location_id).unwrap();
-    assert!(branch_location.is_primary);
-    let hq_location = org.locations.get(&hq_location_id).unwrap();
-    assert!(!hq_location.is_primary);
-
-    // Remove original primary location
-    let message_id4 = Uuid::now_v7();
-    let remove_cmd = RemoveLocation {
-        identity: MessageIdentity {
-            correlation_id: cim_domain::CorrelationId::Single(message_id4),
-            causation_id: cim_domain::CausationId(message_id4),
-            message_id: message_id4,
-        },
-        organization_id: org_id,
-        location_id: hq_location_id,
-    };
-
-    let events = org
-        .handle_command(OrganizationCommand::RemoveLocation(remove_cmd))
-        .unwrap();
-    for event in &events {
-        org.apply_event(event).unwrap();
-    }
-
-    assert_eq!(org.locations.len(), 1);
-    assert!(org.locations.get(&branch_location_id).unwrap().is_primary);
 }
 
 #[test]
@@ -435,27 +402,7 @@ fn test_organization_dissolution() {
     );
     org.status = OrganizationStatus::Active;
 
-    // Add some members
-    let employee_id = Uuid::now_v7();
-    let msg_id = Uuid::now_v7();
-    let add_member_cmd = AddMember {
-        identity: MessageIdentity {
-            correlation_id: cim_domain::CorrelationId::Single(msg_id),
-            causation_id: cim_domain::CausationId(msg_id),
-            message_id: msg_id,
-        },
-        organization_id: org_id,
-        person_id: employee_id,
-        role: OrganizationRole::software_engineer(),
-        department_id: None,
-    };
-
-    let events = org
-        .handle_command(OrganizationCommand::AddMember(add_member_cmd))
-        .unwrap();
-    org.apply_event(&events[0]).unwrap();
-
-    // Try to dissolve organization
+    // Dissolve organization
     let dissolve_cmd = DissolveOrganization {
         identity: {
             let id = Uuid::now_v7();
@@ -470,12 +417,6 @@ fn test_organization_dissolution() {
         effective_date: chrono::Utc::now(),
     };
 
-    let result = org.handle_command(OrganizationCommand::DissolveOrganization(dissolve_cmd.clone()));
-
-    // Clear members to allow dissolution
-    org.members.clear();
-
-    // Now dissolution should succeed
     let events = org
         .handle_command(OrganizationCommand::DissolveOrganization(dissolve_cmd))
         .unwrap();
@@ -541,79 +482,54 @@ fn test_organization_merger() {
 
 #[test]
 fn test_role_permissions() {
-    let ceo_role = OrganizationRole::ceo();
-    assert!(ceo_role.has_permission(&Permission::CreateOrganization));
-    assert!(ceo_role.has_permission(&Permission::ApproveBudget));
+    // Test that Permission enum has organizational permissions only
+    // (no person-role or facility-location permissions)
 
-    let engineer_role = OrganizationRole::software_engineer();
-    assert!(engineer_role.has_permission(&Permission::ViewOrganization));
-    assert!(!engineer_role.has_permission(&Permission::ApproveBudget));
-    assert!(!engineer_role.has_permission(&Permission::RemoveMember));
-
-    let manager_role = OrganizationRole::engineering_manager();
-    assert!(manager_role.has_permission(&Permission::AddMember));
-    assert!(manager_role.has_permission(&Permission::UpdateMemberRole));
-    assert!(!manager_role.has_permission(&Permission::DeleteOrganization));
-}
-
-#[test]
-fn test_member_role_updates() {
+    // Create a role with organizational permissions
     let org_id = Uuid::now_v7();
     let mut org = OrganizationAggregate::new(
         org_id,
-        "Role Update Corp".to_string(),
+        "Permission Test Corp".to_string(),
         OrganizationType::Corporation,
     );
     org.status = OrganizationStatus::Active;
 
-    // Add member as junior engineer
-    let person_id = Uuid::now_v7();
-    let mut junior_role = OrganizationRole::software_engineer();
-    junior_role.level = RoleLevel::Junior;
-
-    let msg_id = Uuid::now_v7();
-    let add_cmd = AddMember {
-        identity: MessageIdentity {
-            correlation_id: cim_domain::CorrelationId::Single(msg_id),
-            causation_id: cim_domain::CausationId(msg_id),
-            message_id: msg_id,
-        },
-        organization_id: org_id,
-        person_id,
-        role: junior_role.clone(),
-        department_id: None,
-    };
-
-    let events = org
-        .handle_command(OrganizationCommand::AddMember(add_cmd))
-        .unwrap();
-    org.apply_event(&events[0]).unwrap();
-
-    // Promote to senior engineer
-    let mut senior_role = OrganizationRole::software_engineer();
-    senior_role.level = RoleLevel::Senior;
-    senior_role.title = "Senior Software Engineer".to_string();
-
     let message_id = Uuid::now_v7();
-    let update_cmd = UpdateMemberRole {
+    let create_role_cmd = CreateRole {
         identity: MessageIdentity {
             correlation_id: cim_domain::CorrelationId::Single(message_id),
             causation_id: cim_domain::CausationId(message_id),
             message_id,
         },
-        organization_id: org_id,
-        person_id,
-        new_role: senior_role.clone(),
+        organization_id: EntityId::from_uuid(org_id),
+        department_id: None,
+        team_id: None,
+        title: "Facility Manager".to_string(),
+        code: "FAC-MGR".to_string(),
+        description: Some("Manages facilities".to_string()),
+        role_type: RoleType::Management,
+        level: Some(5),
+        reports_to: None,
+        permissions: vec![
+            "CreateFacility".to_string(),
+            "ModifyFacility".to_string(),
+            "ViewOrganization".to_string(),
+        ],
+        responsibilities: vec!["Manage organizational facilities".to_string()],
     };
 
     let events = org
-        .handle_command(OrganizationCommand::UpdateMemberRole(update_cmd))
+        .handle_command(OrganizationCommand::CreateRole(create_role_cmd))
         .unwrap();
     org.apply_event(&events[0]).unwrap();
 
-    let member = org.members.get(&person_id).unwrap();
-    assert_eq!(member.role.level, RoleLevel::Senior);
-    assert_eq!(member.role.title, "Senior Software Engineer");
+    let facility_mgr_role = org.roles.values().next().unwrap();
+    assert!(facility_mgr_role.permissions.contains(&"CreateFacility".to_string()));
+    assert!(facility_mgr_role.permissions.contains(&"ModifyFacility".to_string()));
+
+    // Verify NO person-role permissions exist
+    // (AddMember, RemoveMember, UpdateMemberRole were removed)
+    assert!(!facility_mgr_role.permissions.contains(&"AddMember".to_string()));
 }
 
 #[test]
@@ -640,4 +556,67 @@ fn test_organization_size_categories() {
     let (min, max) = enterprise.typical_budget_range();
     assert_eq!(min, 500.0);
     assert_eq!(max, 2000.0);
+}
+
+#[test]
+fn test_facility_update() {
+    let org_id = Uuid::now_v7();
+    let mut org = OrganizationAggregate::new(
+        org_id,
+        "Facility Update Test".to_string(),
+        OrganizationType::Corporation,
+    );
+    org.status = OrganizationStatus::Active;
+
+    // Create facility
+    let message_id = Uuid::now_v7();
+    let create_cmd = CreateFacility {
+        identity: MessageIdentity {
+            correlation_id: cim_domain::CorrelationId::Single(message_id),
+            causation_id: cim_domain::CausationId(message_id),
+            message_id,
+        },
+        organization_id: EntityId::from_uuid(org_id),
+        name: "Office Alpha".to_string(),
+        code: "OFF-A".to_string(),
+        facility_type: FacilityType::Office,
+        description: None,
+        capacity: Some(100),
+        parent_facility_id: None,
+    };
+
+    let events = org
+        .handle_command(OrganizationCommand::CreateFacility(create_cmd))
+        .unwrap();
+    org.apply_event(&events[0]).unwrap();
+
+    let facility_id = org.facilities.keys().next().unwrap().clone();
+
+    // Update facility
+    let message_id2 = Uuid::now_v7();
+    let update_cmd = UpdateFacility {
+        identity: MessageIdentity {
+            correlation_id: cim_domain::CorrelationId::Single(message_id2),
+            causation_id: cim_domain::CausationId(message_id2),
+            message_id: message_id2,
+        },
+        facility_id: facility_id.clone(),
+        organization_id: EntityId::from_uuid(org_id),
+        name: Some("Office Alpha Renovated".to_string()),
+        code: None,
+        description: Some("Newly renovated office".to_string()),
+        capacity: Some(150),
+        status: Some(FacilityStatus::Renovating),
+        parent_facility_id: None,
+    };
+
+    let events = org
+        .handle_command(OrganizationCommand::UpdateFacility(update_cmd))
+        .unwrap();
+    org.apply_event(&events[0]).unwrap();
+
+    let updated_facility = org.facilities.get(&facility_id).unwrap();
+    assert_eq!(updated_facility.name, "Office Alpha Renovated");
+    assert_eq!(updated_facility.capacity, Some(150));
+    assert_eq!(updated_facility.status, FacilityStatus::Renovating);
 }

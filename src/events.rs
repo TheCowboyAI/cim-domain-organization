@@ -312,7 +312,12 @@ pub struct RoleCreated {
     pub team_id: Option<EntityId<Team>>,
     pub title: String,
     pub code: String,
+    pub description: Option<String>,
     pub role_type: RoleType,
+    pub level: Option<u8>,
+    pub reports_to: Option<EntityId<Role>>,
+    pub permissions: Vec<String>,
+    pub responsibilities: Vec<String>,
     pub occurred_at: DateTime<Utc>,
 }
 
@@ -370,6 +375,8 @@ pub struct FacilityCreated {
     pub code: String,
     pub facility_type: FacilityType,
     pub description: Option<String>,
+    pub capacity: Option<u32>,
+    pub parent_facility_id: Option<EntityId<Facility>>,
     pub occurred_at: DateTime<Utc>,
 }
 
