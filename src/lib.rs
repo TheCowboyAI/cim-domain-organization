@@ -13,7 +13,10 @@ pub mod adapters;
 
 // Re-export main types
 pub use entity::{Organization, Department, Team, Role, OrganizationUnit, OrganizationType, OrganizationStatus};
-pub use aggregate::{OrganizationAggregate, OrganizationMember, OrganizationRole, RoleLevel, OrganizationLocation, Permission};
+pub use aggregate::{
+    OrganizationAggregate, OrganizationMember, OrganizationRole, RoleLevel,
+    OrganizationLocation, Permission, OrganizationState
+};
 pub use events::{
     OrganizationEvent, OrganizationCreated, DepartmentCreated, TeamFormed,
     MemberAdded, MemberRoleUpdated, MemberRemoved, ReportingRelationshipChanged,

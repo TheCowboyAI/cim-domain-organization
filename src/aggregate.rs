@@ -5,7 +5,7 @@
 
 use chrono::Utc;
 use cim_domain::{
-    AggregateRoot, EntityId,
+    AggregateRoot, EntityId, MealyStateMachine,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -17,6 +17,38 @@ use crate::{
     events::*,
     OrganizationError, OrganizationResult,
 };
+
+/// Organization aggregate state for MealyStateMachine
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OrganizationState {
+    /// Organization being created
+    Creating,
+    /// Organization pending activation
+    Pending,
+    /// Organization active and operational
+    Active,
+    /// Organization temporarily inactive
+    Inactive,
+    /// Organization suspended (regulatory or policy violation)
+    Suspended,
+    /// Organization dissolved (terminal state)
+    Dissolved,
+    /// Organization merged into another (terminal state)
+    Merged,
+}
+
+impl From<OrganizationStatus> for OrganizationState {
+    fn from(status: OrganizationStatus) -> Self {
+        match status {
+            OrganizationStatus::Pending => OrganizationState::Pending,
+            OrganizationStatus::Active => OrganizationState::Active,
+            OrganizationStatus::Inactive => OrganizationState::Inactive,
+            OrganizationStatus::Suspended => OrganizationState::Suspended,
+            OrganizationStatus::Dissolved => OrganizationState::Dissolved,
+            OrganizationStatus::Merged => OrganizationState::Merged,
+        }
+    }
+}
 
 /// Organization aggregate root
 ///
@@ -273,6 +305,15 @@ impl OrganizationAggregate {
     /// Get the aggregate root ID (Organization ID if it exists)
     pub fn aggregate_id(&self) -> Option<EntityId<Organization>> {
         self.organization.as_ref().map(|org| org.id.clone())
+    }
+
+    /// Get the current state of the organization for MealyStateMachine
+    pub fn current_state(&self) -> OrganizationState {
+        if self.organization.is_none() {
+            OrganizationState::Creating
+        } else {
+            OrganizationState::from(self.status.clone())
+        }
     }
 
     /// Handle organization commands
@@ -1075,6 +1116,75 @@ impl OrganizationAggregate {
             (Dissolved, _) | (Merged, _) => false,
             // All other transitions are invalid
             _ => false,
+        }
+    }
+}
+
+/// MealyStateMachine implementation for OrganizationAggregate
+///
+/// This implements the pure functional state machine pattern from Category Theory
+/// where (State, Input) → (Output, NewState)
+impl MealyStateMachine for OrganizationAggregate {
+    type State = OrganizationState;
+    type Input = OrganizationCommand;
+    type Output = Vec<OrganizationEvent>;
+
+    /// Output function: Given current state and input command, produce events
+    /// This is a pure function - no side effects, deterministic output
+    fn output(&self, _state: Self::State, input: Self::Input) -> Self::Output {
+        // Create a clone for pure command handling
+        let mut clone = self.clone();
+
+        // Use the existing command handlers on the clone
+        match clone.handle_command(input) {
+            Ok(events) => events,
+            Err(_) => vec![], // Failed commands produce no events
+        }
+    }
+
+    /// Transition function: Given current state and input command, determine new state
+    /// This is a pure function - deterministic state transition
+    fn transition(&self, state: Self::State, input: Self::Input) -> Self::State {
+        use OrganizationCommand::*;
+        use OrganizationState::*;
+
+        match (state, input) {
+            // Creating → Pending (organization created)
+            (Creating, CreateOrganization(_)) => Pending,
+
+            // Pending → Active (organization activated)
+            (Pending, ChangeOrganizationStatus(cmd)) if matches!(cmd.new_status, OrganizationStatus::Active) => Active,
+
+            // Active → Inactive (deactivation)
+            (Active, ChangeOrganizationStatus(cmd)) if matches!(cmd.new_status, OrganizationStatus::Inactive) => Inactive,
+
+            // Active → Suspended (suspension)
+            (Active, ChangeOrganizationStatus(cmd)) if matches!(cmd.new_status, OrganizationStatus::Suspended) => Suspended,
+
+            // Active → Dissolved (dissolution)
+            (Active, DissolveOrganization(_)) => Dissolved,
+            (Active, ChangeOrganizationStatus(cmd)) if matches!(cmd.new_status, OrganizationStatus::Dissolved) => Dissolved,
+
+            // Active → Merged (merger)
+            (Active, MergeOrganizations(_)) => Merged,
+            (Active, ChangeOrganizationStatus(cmd)) if matches!(cmd.new_status, OrganizationStatus::Merged) => Merged,
+
+            // Inactive → Active (reactivation)
+            (Inactive, ChangeOrganizationStatus(cmd)) if matches!(cmd.new_status, OrganizationStatus::Active) => Active,
+
+            // Suspended → Active (unsuspend)
+            (Suspended, ChangeOrganizationStatus(cmd)) if matches!(cmd.new_status, OrganizationStatus::Active) => Active,
+
+            // Suspended → Dissolved
+            (Suspended, DissolveOrganization(_)) => Dissolved,
+            (Suspended, ChangeOrganizationStatus(cmd)) if matches!(cmd.new_status, OrganizationStatus::Dissolved) => Dissolved,
+
+            // Terminal states - no transitions
+            (Dissolved, _) => Dissolved,
+            (Merged, _) => Merged,
+
+            // All other commands don't change state
+            (current_state, _) => current_state,
         }
     }
 }
