@@ -65,6 +65,17 @@ This maintains proper domain-driven design boundaries and enables independent do
   - `darwinModules.default` - nix-darwin launchd service
   - Enhanced development shell with build instructions
 
+- **Pure Domain Boundaries**: Organization domain now strictly enforces domain boundaries
+  - **Facility Entity**: New entity representing organizational places (offices, warehouses, data centers)
+    - `Facility` with `FacilityType` (Headquarters, Office, Warehouse, Factory, etc.)
+    - `FacilityStatus` (Active, UnderConstruction, Renovating, Inactive, Closed)
+    - NO address data - facilities reference Location domain via UUID
+  - **Facility Events**: `FacilityCreated`, `FacilityUpdated`, `FacilityRemoved`
+  - **Facility Commands**: `CreateFacility`, `UpdateFacility`, `RemoveFacility`
+  - Domain purity: Only organizational concepts (roles, facilities, departments, teams)
+  - Cross-domain references: UUID-based references to Person and Location domains
+  - Relationships: Managed in separate Association domain (future)
+
 ### Changed
 - **Event Application**: Migrated from mutable to pure functional approach
   - All 17+ event handlers now use pure functions
@@ -81,6 +92,38 @@ This maintains proper domain-driven design boundaries and enables independent do
   - Added `darwin` input for nix-darwin support
   - Multi-platform package outputs
   - Enhanced development environment
+
+### Removed
+
+**BREAKING CHANGES**: To achieve pure domain boundaries, all cross-domain relationship concepts have been removed from the Organization domain. These will be managed in a separate Association domain.
+
+- **Removed Entities** (violated domain boundaries):
+  - `OrganizationMember` - Person-to-role relationship (now in Association domain)
+  - `OrganizationLocation` - Embedded address data (violated Location domain boundary)
+  - `OrganizationRole` - Duplicate of Role entity (redundant)
+  - `RoleLevel` enum - Unused enumeration
+
+- **Removed Events** (cross-domain relationships):
+  - `MemberAdded` - Use Association domain's `PersonRoleAssigned` instead
+  - `MemberRoleUpdated` - Use Association domain's `PersonRoleReassigned` instead
+  - `MemberRemoved` - Use Association domain's `PersonRoleUnassigned` instead
+  - `RoleAssigned` - Person-to-role assignment (relationship)
+  - `RoleVacated` - Person-to-role unassignment (relationship)
+  - `LocationAdded` - Embedded location data (boundary violation)
+  - `PrimaryLocationChanged` - Location management (boundary violation)
+  - `LocationRemoved` - Location management (boundary violation)
+  - `ReportingRelationshipChanged` - Person-to-person reporting (should be role-to-role)
+
+- **Removed Commands** (cross-domain relationships):
+  - `AssignRole` - Person-to-role assignment (relationship)
+  - `VacateRole` - Person-to-role unassignment (relationship)
+  - `AddMember` - Person addition (relationship)
+  - `UpdateMemberRole` - Person role change (relationship)
+  - `RemoveMember` - Person removal (relationship)
+  - `ChangeReportingRelationship` - Person-to-person reporting (relationship)
+  - `AddLocation` - Location addition with embedded address (boundary violation)
+  - `ChangePrimaryLocation` - Location management (boundary violation)
+  - `RemoveLocation` - Location management (boundary violation)
 
 ### Fixed
 - Compilation warnings reduced to 2 non-critical unused field warnings
@@ -105,16 +148,76 @@ This release represents a fundamental architectural shift to pure functional pro
 ### Migration Guide
 For users upgrading from 0.7.x:
 
+#### Pure Functional Architecture (Backward Compatible)
 1. **Existing Code**: Continues to work via backward-compatible wrappers
 2. **New Code**: Use `apply_event_pure()` for pure functional approach
 3. **NATS Deployment**: Optional - library can still be used standalone
 4. **Container Deployment**: Optional - service can run via `cargo run --bin organization-service`
 
+#### Domain Boundary Changes (BREAKING - Requires Migration)
+
+**Removed Relationship Management**:
+
+The following operations are **no longer available** in the Organization domain:
+
+1. **Person-Role Assignments** (removed):
+   ```rust
+   // ❌ OLD (no longer available)
+   AddMember { person_id, role, department_id }
+   AssignRole { role_id, person_id }
+
+   // ✅ NEW (use Association domain - to be created)
+   // These will be handled by a separate cim-domain-association module
+   AssignPersonToRole { person_id, role_id, effective_date }
+   ```
+
+2. **Facility-Location Links** (removed):
+   ```rust
+   // ❌ OLD (no longer available)
+   AddLocation { location_id, name, address }  // Embedded address!
+
+   // ✅ NEW (use pure Facility + Association)
+   CreateFacility { name, code, facility_type }  // No address
+   LinkFacilityToLocation { facility_id, location_id }  // Association domain
+   ```
+
+3. **Person-Person Reporting** (removed):
+   ```rust
+   // ❌ OLD (violated domain purity)
+   ChangeReportingRelationship { subordinate_id, manager_id }
+
+   // ✅ NEW (use Role hierarchy)
+   UpdateRole { role_id, reports_to: Some(manager_role_id) }  // Role-to-role
+   ```
+
+**Migration Path**:
+
+If you were using the removed commands/events:
+1. **For v0.8.0**: Refactor to use pure organization concepts (facilities, roles)
+2. **Wait for Association domain**: Person-role and facility-location relationships will be provided in `cim-domain-association` (coming soon)
+3. **Alternative**: Implement your own relationship management in your application layer
+
 ### References
 - Conversion Assessment: `CONVERSION_ASSESSMENT.md`
 - Conversion Progress: `CONVERSION_PROGRESS.md`
+- Domain Boundary Analysis: `DOMAIN_BOUNDARY_VIOLATIONS.md`
 - Deployment Guide: `deployment/CONTAINER_DEPLOYMENT.md`
 - Template: Based on `cim-domain-person` v0.8.0
+
+### Note on Domain Purity
+
+This release prioritizes **architectural correctness** over backward compatibility. The Organization domain now strictly enforces DDD boundaries:
+
+- **Organization domain** owns: Roles (positions), Facilities (places), Departments, Teams
+- **Person domain** owns: People data, demographics, skills
+- **Location domain** owns: Addresses, coordinates, geographic data
+- **Association domain** (future) owns: Person-role links, facility-location links
+
+This separation enables:
+- Independent domain evolution
+- Clear bounded contexts
+- Proper microservice boundaries
+- Single Responsibility Principle adherence
 
 ## [0.7.8] - Previous Release
 Previous functionality maintained for backward compatibility.
