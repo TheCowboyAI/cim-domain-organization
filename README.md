@@ -25,6 +25,63 @@ The Organization domain extends the base `cim-domain-document` with specialized 
 - 📊 **Analytics & Performance Measurement**: KPI tracking, performance analytics, and organizational health assessment
 - 🔄 **Change Management**: Structured organizational transformation with stakeholder management
 
+## Architecture v0.8.0: Pure Functional + NATS Service
+
+**New in v0.8.0**: The Organization Domain now features a production-ready NATS service with pure functional architecture:
+
+### Pure Functional Programming
+- **100% Pure Functions**: All domain logic is side-effect free following Category Theory (CT) and Functional Reactive Programming (FRP) principles
+- **MealyStateMachine Pattern**: Formal state machine for organizational lifecycle with clear state transitions
+- **Event Sourcing**: All state changes captured as immutable events in NATS JetStream
+- **Backward Compatible**: Existing code continues to work via compatibility wrappers
+
+### NATS Service Binary
+The `organization-service` binary provides:
+- **Event Sourcing**: JetStream-based event store with 1-year retention
+- **Command Processing**: Subscribe to `organization.commands.>` with automatic routing
+- **Snapshot Support**: Configurable snapshot frequency for fast aggregate rebuilding
+- **Horizontal Scaling**: Multiple service replicas with NATS queue group load distribution
+- **Production Ready**: Graceful shutdown, structured logging, health checks
+
+### Container Deployment
+Multi-platform deployment options:
+
+```bash
+# Proxmox LXC Container
+nix build .#organization-lxc
+scp result/tarball/*.tar.xz root@proxmox:/var/lib/vz/template/cache/
+pct create 141 /var/lib/vz/template/cache/organization-service.tar.xz \
+  --hostname organization-service-1 \
+  --net0 name=eth0,bridge=vmbr0,ip=10.0.64.141/19,gw=10.0.64.1 \
+  --start 1
+
+# NixOS Container
+containers.organization-service = {
+  autoStart = true;
+  config = { ... }: {
+    services.cim-domain-organization = {
+      enable = true;
+      natsUrl = "nats://10.0.0.41:4222";
+      streamName = "ORGANIZATION_EVENTS";
+    };
+  };
+};
+
+# macOS (nix-darwin)
+services.cim-domain-organization = {
+  enable = true;
+  natsUrl = "nats://localhost:4222";
+  streamName = "ORGANIZATION_EVENTS";
+};
+
+# Run service directly
+export NATS_URL=nats://localhost:4222
+export STREAM_NAME=ORGANIZATION_EVENTS
+cargo run --bin organization-service
+```
+
+See [`deployment/CONTAINER_DEPLOYMENT.md`](deployment/CONTAINER_DEPLOYMENT.md) for complete deployment guide.
+
 ## Mathematical Foundation
 
 The CIM Organization Domain is built on a formal [Organization Subject Algebra](docs/algebra/README.md) that provides:
