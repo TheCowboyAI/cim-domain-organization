@@ -11,12 +11,15 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::entity::{
-    Department, DepartmentStatus, Organization, OrganizationStatus, OrganizationType,
+    Department, DepartmentStatus, Facility, FacilityStatus, FacilityType,
+    Organization, OrganizationStatus, OrganizationType,
     Role, RoleStatus, RoleType, Team, TeamStatus, TeamType,
 };
 use crate::aggregate::OrganizationAggregate;
 
 /// Base organization command enum
+/// NOTE: This enum only contains pure organization domain commands.
+/// Relationship commands (person-to-role, facility-to-location) belong in separate Association domain.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "command_type")]
 pub enum OrganizationCommand {
@@ -24,6 +27,7 @@ pub enum OrganizationCommand {
     UpdateOrganization(UpdateOrganization),
     DissolveOrganization(DissolveOrganization),
     MergeOrganizations(MergeOrganizations),
+    ChangeOrganizationStatus(ChangeOrganizationStatus),
     CreateDepartment(CreateDepartment),
     UpdateDepartment(UpdateDepartment),
     RestructureDepartment(RestructureDepartment),
@@ -33,23 +37,12 @@ pub enum OrganizationCommand {
     DisbandTeam(DisbandTeam),
     CreateRole(CreateRole),
     UpdateRole(UpdateRole),
-    AssignRole(AssignRole),
-    VacateRole(VacateRole),
     DeprecateRole(DeprecateRole),
-    // Member management commands
-    AddMember(AddMember),
-    UpdateMemberRole(UpdateMemberRole),
-    RemoveMember(RemoveMember),
-    ChangeReportingRelationship(ChangeReportingRelationship),
-    // Location management commands
-    AddLocation(AddLocation),
-    ChangePrimaryLocation(ChangePrimaryLocation),
-    RemoveLocation(RemoveLocation),
-    // Hierarchy commands
+    CreateFacility(CreateFacility),
+    UpdateFacility(UpdateFacility),
+    RemoveFacility(RemoveFacility),
     AddChildOrganization(AddChildOrganization),
     RemoveChildOrganization(RemoveChildOrganization),
-    // Status commands
-    ChangeOrganizationStatus(ChangeOrganizationStatus),
 }
 
 impl Command for OrganizationCommand {
@@ -61,6 +54,7 @@ impl Command for OrganizationCommand {
             OrganizationCommand::UpdateOrganization(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
             OrganizationCommand::DissolveOrganization(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
             OrganizationCommand::MergeOrganizations(cmd) => Some(EntityId::from_uuid(cmd.surviving_organization_id.clone().into())),
+            OrganizationCommand::ChangeOrganizationStatus(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
             OrganizationCommand::CreateDepartment(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
             OrganizationCommand::UpdateDepartment(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
             OrganizationCommand::RestructureDepartment(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
@@ -70,23 +64,12 @@ impl Command for OrganizationCommand {
             OrganizationCommand::DisbandTeam(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
             OrganizationCommand::CreateRole(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
             OrganizationCommand::UpdateRole(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
-            OrganizationCommand::AssignRole(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
-            OrganizationCommand::VacateRole(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
             OrganizationCommand::DeprecateRole(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
-            // Member management
-            OrganizationCommand::AddMember(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
-            OrganizationCommand::UpdateMemberRole(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
-            OrganizationCommand::RemoveMember(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
-            OrganizationCommand::ChangeReportingRelationship(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
-            // Location management
-            OrganizationCommand::AddLocation(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
-            OrganizationCommand::ChangePrimaryLocation(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
-            OrganizationCommand::RemoveLocation(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
-            // Hierarchy
+            OrganizationCommand::CreateFacility(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
+            OrganizationCommand::UpdateFacility(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
+            OrganizationCommand::RemoveFacility(cmd) => Some(EntityId::from_uuid(cmd.organization_id.clone().into())),
             OrganizationCommand::AddChildOrganization(cmd) => Some(EntityId::from_uuid(cmd.parent_organization_id)),
             OrganizationCommand::RemoveChildOrganization(cmd) => Some(EntityId::from_uuid(cmd.parent_organization_id)),
-            // Status
-            OrganizationCommand::ChangeOrganizationStatus(cmd) => Some(EntityId::from_uuid(cmd.organization_id)),
         }
     }
 }
@@ -358,43 +341,6 @@ impl Command for UpdateRole {
     }
 }
 
-/// Command: Assign role to person
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AssignRole {
-    pub identity: MessageIdentity,
-    pub role_id: EntityId<Role>,
-    pub organization_id: EntityId<Organization>,
-    pub person_id: Uuid,  // Reference to person from cim-domain-person
-    pub effective_date: DateTime<Utc>,
-}
-
-impl Command for AssignRole {
-    type Aggregate = OrganizationAggregate;
-
-    fn aggregate_id(&self) -> Option<EntityId<Self::Aggregate>> {
-        Some(EntityId::from_uuid(self.organization_id.clone().into()))
-    }
-}
-
-/// Command: Vacate role
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VacateRole {
-    pub identity: MessageIdentity,
-    pub role_id: EntityId<Role>,
-    pub organization_id: EntityId<Organization>,
-    pub person_id: Uuid,
-    pub reason: crate::events::VacationReason,
-    pub effective_date: DateTime<Utc>,
-}
-
-impl Command for VacateRole {
-    type Aggregate = OrganizationAggregate;
-
-    fn aggregate_id(&self) -> Option<EntityId<Self::Aggregate>> {
-        Some(EntityId::from_uuid(self.organization_id.clone().into()))
-    }
-}
-
 /// Command: Deprecate role
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeprecateRole {
@@ -414,71 +360,66 @@ impl Command for DeprecateRole {
     }
 }
 
-// Member management commands
+// Facility commands - pure organizational places (no location/address data)
 
-/// Command: Add member to organization
+/// Command: Create facility
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AddMember {
+pub struct CreateFacility {
     pub identity: MessageIdentity,
-    pub organization_id: Uuid,
-    pub person_id: Uuid,
-    pub role: crate::aggregate::OrganizationRole,
-    pub department_id: Option<Uuid>,
+    pub organization_id: EntityId<Organization>,
+    pub name: String,
+    pub code: String,
+    pub facility_type: FacilityType,
+    pub description: Option<String>,
+    pub capacity: Option<u32>,
+    pub parent_facility_id: Option<EntityId<Facility>>,
 }
 
-/// Command: Update member role
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateMemberRole {
-    pub identity: MessageIdentity,
-    pub organization_id: Uuid,
-    pub person_id: Uuid,
-    pub new_role: crate::aggregate::OrganizationRole,
+impl Command for CreateFacility {
+    type Aggregate = OrganizationAggregate;
+
+    fn aggregate_id(&self) -> Option<EntityId<Self::Aggregate>> {
+        Some(EntityId::from_uuid(self.organization_id.clone().into()))
+    }
 }
 
-/// Command: Remove member from organization
+/// Command: Update facility
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemoveMember {
+pub struct UpdateFacility {
     pub identity: MessageIdentity,
-    pub organization_id: Uuid,
-    pub person_id: Uuid,
+    pub facility_id: EntityId<Facility>,
+    pub organization_id: EntityId<Organization>,
+    pub name: Option<String>,
+    pub code: Option<String>,
+    pub description: Option<String>,
+    pub capacity: Option<u32>,
+    pub status: Option<FacilityStatus>,
+    pub parent_facility_id: Option<EntityId<Facility>>,
+}
+
+impl Command for UpdateFacility {
+    type Aggregate = OrganizationAggregate;
+
+    fn aggregate_id(&self) -> Option<EntityId<Self::Aggregate>> {
+        Some(EntityId::from_uuid(self.organization_id.clone().into()))
+    }
+}
+
+/// Command: Remove facility
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveFacility {
+    pub identity: MessageIdentity,
+    pub facility_id: EntityId<Facility>,
+    pub organization_id: EntityId<Organization>,
     pub reason: Option<String>,
 }
 
-/// Command: Change reporting relationship
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChangeReportingRelationship {
-    pub identity: MessageIdentity,
-    pub organization_id: Uuid,
-    pub subordinate_id: Uuid,
-    pub new_manager_id: Uuid,
-}
+impl Command for RemoveFacility {
+    type Aggregate = OrganizationAggregate;
 
-// Location management commands
-
-/// Command: Add location to organization
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AddLocation {
-    pub identity: MessageIdentity,
-    pub organization_id: Uuid,
-    pub location_id: Uuid,
-    pub name: String,
-    pub address: String,
-}
-
-/// Command: Change primary location
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChangePrimaryLocation {
-    pub identity: MessageIdentity,
-    pub organization_id: Uuid,
-    pub location_id: Uuid,
-}
-
-/// Command: Remove location from organization
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemoveLocation {
-    pub identity: MessageIdentity,
-    pub organization_id: Uuid,
-    pub location_id: Uuid,
+    fn aggregate_id(&self) -> Option<EntityId<Self::Aggregate>> {
+        Some(EntityId::from_uuid(self.organization_id.clone().into()))
+    }
 }
 
 // Hierarchy commands

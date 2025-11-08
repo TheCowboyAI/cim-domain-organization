@@ -101,35 +101,17 @@ pub fn event_to_subject(event: &OrganizationEvent) -> String {
         OrganizationEvent::RoleUpdated(_) => {
             format!("events.organization.{}.role.updated", org_id)
         }
-        OrganizationEvent::RoleAssigned(_) => {
-            format!("events.organization.{}.role.assigned", org_id)
-        }
-        OrganizationEvent::RoleVacated(_) => {
-            format!("events.organization.{}.role.vacated", org_id)
-        }
         OrganizationEvent::RoleDeprecated(_) => {
             format!("events.organization.{}.role.deprecated", org_id)
         }
-        OrganizationEvent::MemberAdded(_) => {
-            format!("events.organization.{}.member.added", org_id)
+        OrganizationEvent::FacilityCreated(_) => {
+            format!("events.organization.{}.facility.created", org_id)
         }
-        OrganizationEvent::MemberRoleUpdated(_) => {
-            format!("events.organization.{}.member.role_updated", org_id)
+        OrganizationEvent::FacilityUpdated(_) => {
+            format!("events.organization.{}.facility.updated", org_id)
         }
-        OrganizationEvent::MemberRemoved(_) => {
-            format!("events.organization.{}.member.removed", org_id)
-        }
-        OrganizationEvent::ReportingRelationshipChanged(_) => {
-            format!("events.organization.{}.reporting.changed", org_id)
-        }
-        OrganizationEvent::LocationAdded(_) => {
-            format!("events.organization.{}.location.added", org_id)
-        }
-        OrganizationEvent::PrimaryLocationChanged(_) => {
-            format!("events.organization.{}.location.primary_changed", org_id)
-        }
-        OrganizationEvent::LocationRemoved(_) => {
-            format!("events.organization.{}.location.removed", org_id)
+        OrganizationEvent::FacilityRemoved(_) => {
+            format!("events.organization.{}.facility.removed", org_id)
         }
         OrganizationEvent::OrganizationStatusChanged(_) => {
             format!("events.organization.{}.status.changed", org_id)

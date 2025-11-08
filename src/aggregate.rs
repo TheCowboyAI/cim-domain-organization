@@ -181,12 +181,15 @@ impl OrganizationAggregate {
     }
 
     /// Handle organization commands
+    /// NOTE: This only handles pure organization domain commands.
+    /// Relationship commands (person-to-role, facility-to-location) are handled in separate Association domain.
     pub fn handle_command(&mut self, command: OrganizationCommand) -> OrganizationResult<Vec<OrganizationEvent>> {
         match command {
             OrganizationCommand::CreateOrganization(cmd) => self.handle_create_organization(cmd),
             OrganizationCommand::UpdateOrganization(cmd) => self.handle_update_organization(cmd),
             OrganizationCommand::DissolveOrganization(cmd) => self.handle_dissolve_organization(cmd),
             OrganizationCommand::MergeOrganizations(cmd) => self.handle_merge_organizations(cmd),
+            OrganizationCommand::ChangeOrganizationStatus(cmd) => self.handle_change_organization_status(cmd),
             OrganizationCommand::CreateDepartment(cmd) => self.handle_create_department(cmd),
             OrganizationCommand::UpdateDepartment(cmd) => self.handle_update_department(cmd),
             OrganizationCommand::RestructureDepartment(cmd) => self.handle_restructure_department(cmd),
@@ -196,23 +199,12 @@ impl OrganizationAggregate {
             OrganizationCommand::DisbandTeam(cmd) => self.handle_disband_team(cmd),
             OrganizationCommand::CreateRole(cmd) => self.handle_create_role(cmd),
             OrganizationCommand::UpdateRole(cmd) => self.handle_update_role(cmd),
-            OrganizationCommand::AssignRole(cmd) => self.handle_assign_role(cmd),
-            OrganizationCommand::VacateRole(cmd) => self.handle_vacate_role(cmd),
             OrganizationCommand::DeprecateRole(cmd) => self.handle_deprecate_role(cmd),
-            // Member management
-            OrganizationCommand::AddMember(cmd) => self.handle_add_member(cmd),
-            OrganizationCommand::UpdateMemberRole(cmd) => self.handle_update_member_role(cmd),
-            OrganizationCommand::RemoveMember(cmd) => self.handle_remove_member(cmd),
-            OrganizationCommand::ChangeReportingRelationship(cmd) => self.handle_change_reporting_relationship(cmd),
-            // Location management
-            OrganizationCommand::AddLocation(cmd) => self.handle_add_location(cmd),
-            OrganizationCommand::ChangePrimaryLocation(cmd) => self.handle_change_primary_location(cmd),
-            OrganizationCommand::RemoveLocation(cmd) => self.handle_remove_location(cmd),
-            // Hierarchy
+            OrganizationCommand::CreateFacility(cmd) => self.handle_create_facility(cmd),
+            OrganizationCommand::UpdateFacility(cmd) => self.handle_update_facility(cmd),
+            OrganizationCommand::RemoveFacility(cmd) => self.handle_remove_facility(cmd),
             OrganizationCommand::AddChildOrganization(cmd) => self.handle_add_child_organization(cmd),
             OrganizationCommand::RemoveChildOrganization(cmd) => self.handle_remove_child_organization(cmd),
-            // Status
-            OrganizationCommand::ChangeOrganizationStatus(cmd) => self.handle_change_organization_status(cmd),
         }
     }
 
@@ -305,52 +297,53 @@ impl OrganizationAggregate {
                 };
                 new_aggregate.roles.insert(e.role_id.clone(), role);
             }
-            OrganizationEvent::MemberAdded(e) => {
-                let member = OrganizationMember {
-                    id: e.person_id,
-                    person_id: e.person_id,
-                    role: e.role.clone(),
-                    department_id: e.department_id,
-                    joined_at: e.occurred_at,
-                };
-                new_aggregate.members.insert(e.person_id, member);
-            }
-            OrganizationEvent::LocationAdded(e) => {
-                let location = OrganizationLocation {
-                    id: e.location_id,
+            OrganizationEvent::FacilityCreated(e) => {
+                let facility = Facility {
+                    id: e.facility_id.clone(),
+                    organization_id: e.organization_id.clone(),
                     name: e.name.clone(),
-                    address: e.address.clone(),
-                    is_primary: e.is_primary,
+                    code: e.code.clone(),
+                    facility_type: e.facility_type.clone(),
+                    description: e.description.clone(),
+                    capacity: None,
+                    status: FacilityStatus::Active,
+                    parent_facility_id: None,
+                    created_at: e.occurred_at,
+                    updated_at: e.occurred_at,
                 };
-                new_aggregate.locations.insert(e.location_id, location);
+                new_aggregate.facilities.insert(e.facility_id.clone(), facility);
+            }
+            OrganizationEvent::FacilityUpdated(e) => {
+                if let Some(facility) = new_aggregate.facilities.get_mut(&e.facility_id) {
+                    if let Some(name) = &e.changes.name {
+                        facility.name = name.clone();
+                    }
+                    if let Some(code) = &e.changes.code {
+                        facility.code = code.clone();
+                    }
+                    if let Some(description) = &e.changes.description {
+                        facility.description = Some(description.clone());
+                    }
+                    if let Some(capacity) = e.changes.capacity {
+                        facility.capacity = Some(capacity);
+                    }
+                    if let Some(status) = &e.changes.status {
+                        facility.status = status.clone();
+                    }
+                    if let Some(parent_facility_id) = &e.changes.parent_facility_id {
+                        facility.parent_facility_id = Some(parent_facility_id.clone());
+                    }
+                    facility.updated_at = e.occurred_at;
+                }
+            }
+            OrganizationEvent::FacilityRemoved(e) => {
+                new_aggregate.facilities.remove(&e.facility_id);
             }
             OrganizationEvent::OrganizationStatusChanged(e) => {
                 new_aggregate.status = e.new_status.clone();
                 if let Some(org) = &mut new_aggregate.organization {
                     org.status = e.new_status.clone();
                 }
-            }
-            OrganizationEvent::MemberRoleUpdated(e) => {
-                if let Some(member) = new_aggregate.members.get_mut(&e.person_id) {
-                    member.role = e.new_role.clone();
-                }
-            }
-            OrganizationEvent::MemberRemoved(e) => {
-                new_aggregate.members.remove(&e.person_id);
-            }
-            OrganizationEvent::ReportingRelationshipChanged(e) => {
-                if let Some(subordinate) = new_aggregate.members.get_mut(&e.person_id) {
-                    subordinate.role.reports_to = e.new_manager_id;
-                }
-            }
-            OrganizationEvent::PrimaryLocationChanged(e) => {
-                // Update all locations to set the new primary
-                for (id, location) in new_aggregate.locations.iter_mut() {
-                    location.is_primary = *id == e.new_primary_location_id;
-                }
-            }
-            OrganizationEvent::LocationRemoved(e) => {
-                new_aggregate.locations.remove(&e.location_id);
             }
             OrganizationEvent::OrganizationDissolved(_e) => {
                 new_aggregate.status = OrganizationStatus::Dissolved;
@@ -661,35 +654,6 @@ impl OrganizationAggregate {
         Ok(vec![OrganizationEvent::RoleUpdated(event)])
     }
 
-    fn handle_assign_role(&mut self, cmd: AssignRole) -> OrganizationResult<Vec<OrganizationEvent>> {
-        let event = RoleAssigned {
-            event_id: Uuid::now_v7(),
-            identity: cmd.identity,
-            role_id: cmd.role_id,
-            organization_id: cmd.organization_id,
-            person_id: cmd.person_id,
-            effective_date: cmd.effective_date,
-            occurred_at: Utc::now(),
-        };
-
-        Ok(vec![OrganizationEvent::RoleAssigned(event)])
-    }
-
-    fn handle_vacate_role(&mut self, cmd: VacateRole) -> OrganizationResult<Vec<OrganizationEvent>> {
-        let event = RoleVacated {
-            event_id: Uuid::now_v7(),
-            identity: cmd.identity,
-            role_id: cmd.role_id,
-            organization_id: cmd.organization_id,
-            vacated_by: cmd.person_id,
-            reason: cmd.reason,
-            effective_date: cmd.effective_date,
-            occurred_at: Utc::now(),
-        };
-
-        Ok(vec![OrganizationEvent::RoleVacated(event)])
-    }
-
     fn handle_deprecate_role(&mut self, cmd: DeprecateRole) -> OrganizationResult<Vec<OrganizationEvent>> {
         let event = RoleDeprecated {
             event_id: Uuid::now_v7(),
@@ -705,193 +669,65 @@ impl OrganizationAggregate {
         Ok(vec![OrganizationEvent::RoleDeprecated(event)])
     }
 
-    // Member management handlers
+    // Facility management handlers - pure organizational places (no location/address data)
 
-    fn handle_add_member(&mut self, cmd: AddMember) -> OrganizationResult<Vec<OrganizationEvent>> {
-        // Check if member already exists
-        if self.members.contains_key(&cmd.person_id) {
-            return Err(OrganizationError::DuplicateEntity(format!("Member {} already exists", cmd.person_id)));
-        }
-
-        // Create the MemberAdded event
-        let event = crate::events::MemberAdded {
+    fn handle_create_facility(&mut self, cmd: CreateFacility) -> OrganizationResult<Vec<OrganizationEvent>> {
+        let event = FacilityCreated {
             event_id: Uuid::now_v7(),
             identity: cmd.identity,
-            organization_id: EntityId::from_uuid(cmd.organization_id),
-            person_id: cmd.person_id,
-            role: cmd.role,
-            department_id: cmd.department_id,
+            facility_id: EntityId::new(),
+            organization_id: cmd.organization_id,
+            name: cmd.name,
+            code: cmd.code,
+            facility_type: cmd.facility_type,
+            description: cmd.description,
             occurred_at: Utc::now(),
         };
 
-        Ok(vec![OrganizationEvent::MemberAdded(event)])
+        Ok(vec![OrganizationEvent::FacilityCreated(event)])
     }
 
-    fn handle_update_member_role(&mut self, cmd: UpdateMemberRole) -> OrganizationResult<Vec<OrganizationEvent>> {
-        // Check if member exists
-        let member = self.members.get(&cmd.person_id)
-            .ok_or_else(|| OrganizationError::OrganizationNotFound(cmd.person_id))?;
+    fn handle_update_facility(&mut self, cmd: UpdateFacility) -> OrganizationResult<Vec<OrganizationEvent>> {
+        // Check if facility exists
+        if !self.facilities.contains_key(&cmd.facility_id) {
+            return Err(OrganizationError::EntityNotFound(format!("Facility {} not found", cmd.facility_id)));
+        }
 
-        // Create event with previous role for history tracking
-        let event = crate::events::MemberRoleUpdated {
+        let event = FacilityUpdated {
             event_id: Uuid::now_v7(),
             identity: cmd.identity,
-            organization_id: EntityId::from_uuid(cmd.organization_id),
-            person_id: cmd.person_id,
-            new_role: cmd.new_role.clone(),
-            previous_role: member.role.clone(),
+            facility_id: cmd.facility_id,
+            organization_id: cmd.organization_id,
+            changes: FacilityChanges {
+                name: cmd.name,
+                code: cmd.code,
+                description: cmd.description,
+                capacity: cmd.capacity,
+                status: cmd.status,
+                parent_facility_id: cmd.parent_facility_id,
+            },
             occurred_at: Utc::now(),
         };
 
-        Ok(vec![OrganizationEvent::MemberRoleUpdated(event)])
+        Ok(vec![OrganizationEvent::FacilityUpdated(event)])
     }
 
-    fn handle_remove_member(&mut self, cmd: RemoveMember) -> OrganizationResult<Vec<OrganizationEvent>> {
-        // Check if member exists
-        if !self.members.contains_key(&cmd.person_id) {
-            return Err(OrganizationError::OrganizationNotFound(cmd.person_id));
+    fn handle_remove_facility(&mut self, cmd: RemoveFacility) -> OrganizationResult<Vec<OrganizationEvent>> {
+        // Check if facility exists
+        if !self.facilities.contains_key(&cmd.facility_id) {
+            return Err(OrganizationError::EntityNotFound(format!("Facility {} not found", cmd.facility_id)));
         }
 
-        // Create MemberRemoved event
-        let event = crate::events::MemberRemoved {
+        let event = FacilityRemoved {
             event_id: Uuid::now_v7(),
             identity: cmd.identity,
-            organization_id: EntityId::from_uuid(cmd.organization_id),
-            person_id: cmd.person_id,
+            facility_id: cmd.facility_id,
+            organization_id: cmd.organization_id,
             reason: cmd.reason,
             occurred_at: Utc::now(),
         };
 
-        Ok(vec![OrganizationEvent::MemberRemoved(event)])
-    }
-
-    fn handle_change_reporting_relationship(&mut self, cmd: ChangeReportingRelationship) -> OrganizationResult<Vec<OrganizationEvent>> {
-        // Check both members exist
-        if !self.members.contains_key(&cmd.subordinate_id) {
-            return Err(OrganizationError::OrganizationNotFound(cmd.subordinate_id));
-        }
-
-        if !self.members.contains_key(&cmd.new_manager_id) {
-            return Err(OrganizationError::OrganizationNotFound(cmd.new_manager_id));
-        }
-
-        // Check for circular reference - the new manager cannot be a direct or indirect subordinate of the subordinate
-        if self.would_create_circular_reference(cmd.subordinate_id, cmd.new_manager_id) {
-            return Err(OrganizationError::CircularReference("Cannot create circular reporting relationship".to_string()));
-        }
-
-        // Get current manager for history
-        let previous_manager = self.members.get(&cmd.subordinate_id)
-            .and_then(|m| m.role.reports_to);
-
-        // Create event
-        let event = crate::events::ReportingRelationshipChanged {
-            event_id: Uuid::now_v7(),
-            identity: cmd.identity,
-            organization_id: EntityId::from_uuid(cmd.organization_id),
-            person_id: cmd.subordinate_id,
-            new_manager_id: Some(cmd.new_manager_id),
-            previous_manager_id: previous_manager,
-            occurred_at: Utc::now(),
-        };
-
-        Ok(vec![OrganizationEvent::ReportingRelationshipChanged(event)])
-    }
-
-    // Location management handlers
-
-    fn handle_add_location(&mut self, cmd: AddLocation) -> OrganizationResult<Vec<OrganizationEvent>> {
-        // Check if location already exists
-        if self.locations.contains_key(&cmd.location_id) {
-            return Err(OrganizationError::DuplicateEntity(format!("Location {} already exists", cmd.location_id)));
-        }
-
-        // Create LocationAdded event
-        let event = crate::events::LocationAdded {
-            event_id: Uuid::now_v7(),
-            identity: cmd.identity,
-            organization_id: EntityId::from_uuid(cmd.organization_id),
-            location_id: cmd.location_id,
-            name: cmd.name,
-            address: cmd.address,
-            is_primary: self.locations.is_empty(), // First location is primary
-            occurred_at: Utc::now(),
-        };
-
-        Ok(vec![OrganizationEvent::LocationAdded(event)])
-    }
-
-    fn handle_change_primary_location(&mut self, cmd: ChangePrimaryLocation) -> OrganizationResult<Vec<OrganizationEvent>> {
-        // Check if location exists
-        if !self.locations.contains_key(&cmd.location_id) {
-            return Err(OrganizationError::OrganizationNotFound(cmd.location_id));
-        }
-
-        // Find the previous primary location
-        let previous_primary = self.locations.iter()
-            .find(|(_, loc)| loc.is_primary)
-            .map(|(id, _)| *id);
-
-        // Create event
-        let event = crate::events::PrimaryLocationChanged {
-            event_id: Uuid::now_v7(),
-            identity: cmd.identity,
-            organization_id: EntityId::from_uuid(cmd.organization_id),
-            new_primary_location_id: cmd.location_id,
-            previous_primary_location_id: previous_primary,
-            occurred_at: Utc::now(),
-        };
-
-        Ok(vec![OrganizationEvent::PrimaryLocationChanged(event)])
-    }
-
-    fn handle_remove_location(&mut self, cmd: RemoveLocation) -> OrganizationResult<Vec<OrganizationEvent>> {
-        // Check if location exists
-        if !self.locations.contains_key(&cmd.location_id) {
-            return Err(OrganizationError::OrganizationNotFound(cmd.location_id));
-        }
-
-        // Create event
-        let event = crate::events::LocationRemoved {
-            event_id: Uuid::now_v7(),
-            identity: cmd.identity,
-            organization_id: EntityId::from_uuid(cmd.organization_id),
-            location_id: cmd.location_id,
-            occurred_at: Utc::now(),
-        };
-
-        Ok(vec![OrganizationEvent::LocationRemoved(event)])
-    }
-
-    // Helper methods
-
-    /// Check if making subordinate report to new_manager would create a circular reference
-    fn would_create_circular_reference(&self, subordinate_id: Uuid, new_manager_id: Uuid) -> bool {
-        // Start from the new manager and traverse up the reporting chain
-        // If we encounter the subordinate, it would create a cycle
-        let mut current_id = new_manager_id;
-        let mut visited = std::collections::HashSet::new();
-
-        while let Some(member) = self.members.get(&current_id) {
-            // Avoid infinite loops in case there's already a cycle
-            if !visited.insert(current_id) {
-                break;
-            }
-
-            // If the new manager reports to the subordinate (directly or indirectly), it's a cycle
-            if current_id == subordinate_id {
-                return true;
-            }
-
-            // Move up the reporting chain
-            if let Some(reports_to) = member.role.reports_to {
-                current_id = reports_to;
-            } else {
-                break;
-            }
-        }
-
-        false
+        Ok(vec![OrganizationEvent::FacilityRemoved(event)])
     }
 
     // Hierarchy handlers

@@ -24,16 +24,21 @@ pub use aggregate::{
 };
 pub use events::{
     OrganizationEvent, OrganizationCreated, OrganizationUpdated,
-    DepartmentCreated, TeamFormed, RoleCreated,
-    FacilityCreated, FacilityUpdated, FacilityRemoved,
     OrganizationStatusChanged, OrganizationDissolved, OrganizationMerged,
+    DepartmentCreated, DepartmentUpdated, DepartmentRestructured, DepartmentDissolved,
+    TeamFormed, TeamUpdated, TeamDisbanded,
+    RoleCreated, RoleUpdated, RoleDeprecated,
+    FacilityCreated, FacilityUpdated, FacilityRemoved,
     ChildOrganizationAdded, ChildOrganizationRemoved
 };
 pub use commands::{
     OrganizationCommand, CreateOrganization, UpdateOrganization,
-    CreateDepartment, CreateTeam, CreateRole, CreateFacility,
-    AddChildOrganization, RemoveChildOrganization, ChangeOrganizationStatus,
-    DissolveOrganization, MergeOrganizations
+    DissolveOrganization, MergeOrganizations, ChangeOrganizationStatus,
+    CreateDepartment, UpdateDepartment, RestructureDepartment, DissolveDepartment,
+    CreateTeam, UpdateTeam, DisbandTeam,
+    CreateRole, UpdateRole, DeprecateRole,
+    CreateFacility, UpdateFacility, RemoveFacility,
+    AddChildOrganization, RemoveChildOrganization
 };
 pub use cim_domain::{EntityId, MessageIdentity};
 

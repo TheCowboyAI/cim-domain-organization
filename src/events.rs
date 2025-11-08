@@ -11,11 +11,14 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::entity::{
-    Department, DepartmentStatus, Organization, OrganizationStatus, OrganizationType,
+    Department, DepartmentStatus, Facility, FacilityStatus, FacilityType,
+    Organization, OrganizationStatus, OrganizationType,
     Role, RoleStatus, RoleType, Team, TeamStatus, TeamType,
 };
 
 /// Aggregate of all organization domain events
+/// NOTE: This enum only contains pure organization domain events.
+/// Relationship events (person-to-role, facility-to-location) belong in separate Association domain.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event_type")]
 pub enum OrganizationEvent {
@@ -33,16 +36,10 @@ pub enum OrganizationEvent {
     TeamDisbanded(TeamDisbanded),
     RoleCreated(RoleCreated),
     RoleUpdated(RoleUpdated),
-    RoleAssigned(RoleAssigned),
-    RoleVacated(RoleVacated),
     RoleDeprecated(RoleDeprecated),
-    MemberAdded(MemberAdded),
-    MemberRoleUpdated(MemberRoleUpdated),
-    MemberRemoved(MemberRemoved),
-    ReportingRelationshipChanged(ReportingRelationshipChanged),
-    LocationAdded(LocationAdded),
-    PrimaryLocationChanged(PrimaryLocationChanged),
-    LocationRemoved(LocationRemoved),
+    FacilityCreated(FacilityCreated),
+    FacilityUpdated(FacilityUpdated),
+    FacilityRemoved(FacilityRemoved),
     ChildOrganizationAdded(ChildOrganizationAdded),
     ChildOrganizationRemoved(ChildOrganizationRemoved),
 }
@@ -54,6 +51,7 @@ impl cim_domain::DomainEvent for OrganizationEvent {
             OrganizationEvent::OrganizationUpdated(e) => e.organization_id.clone().into(),
             OrganizationEvent::OrganizationDissolved(e) => e.organization_id.clone().into(),
             OrganizationEvent::OrganizationMerged(e) => e.surviving_organization_id.clone().into(),
+            OrganizationEvent::OrganizationStatusChanged(e) => e.organization_id.clone().into(),
             OrganizationEvent::DepartmentCreated(e) => e.organization_id.clone().into(),
             OrganizationEvent::DepartmentUpdated(e) => e.organization_id.clone().into(),
             OrganizationEvent::DepartmentRestructured(e) => e.organization_id.clone().into(),
@@ -63,17 +61,10 @@ impl cim_domain::DomainEvent for OrganizationEvent {
             OrganizationEvent::TeamDisbanded(e) => e.organization_id.clone().into(),
             OrganizationEvent::RoleCreated(e) => e.organization_id.clone().into(),
             OrganizationEvent::RoleUpdated(e) => e.organization_id.clone().into(),
-            OrganizationEvent::RoleAssigned(e) => e.organization_id.clone().into(),
-            OrganizationEvent::RoleVacated(e) => e.organization_id.clone().into(),
             OrganizationEvent::RoleDeprecated(e) => e.organization_id.clone().into(),
-            OrganizationEvent::MemberAdded(e) => e.organization_id.clone().into(),
-            OrganizationEvent::MemberRoleUpdated(e) => e.organization_id.clone().into(),
-            OrganizationEvent::MemberRemoved(e) => e.organization_id.clone().into(),
-            OrganizationEvent::ReportingRelationshipChanged(e) => e.organization_id.clone().into(),
-            OrganizationEvent::LocationAdded(e) => e.organization_id.clone().into(),
-            OrganizationEvent::PrimaryLocationChanged(e) => e.organization_id.clone().into(),
-            OrganizationEvent::LocationRemoved(e) => e.organization_id.clone().into(),
-            OrganizationEvent::OrganizationStatusChanged(e) => e.organization_id.clone().into(),
+            OrganizationEvent::FacilityCreated(e) => e.organization_id.clone().into(),
+            OrganizationEvent::FacilityUpdated(e) => e.organization_id.clone().into(),
+            OrganizationEvent::FacilityRemoved(e) => e.organization_id.clone().into(),
             OrganizationEvent::ChildOrganizationAdded(e) => e.parent_organization_id.clone().into(),
             OrganizationEvent::ChildOrganizationRemoved(e) => e.parent_organization_id.clone().into(),
         }
@@ -85,6 +76,7 @@ impl cim_domain::DomainEvent for OrganizationEvent {
             OrganizationEvent::OrganizationUpdated(_) => "OrganizationUpdated",
             OrganizationEvent::OrganizationDissolved(_) => "OrganizationDissolved",
             OrganizationEvent::OrganizationMerged(_) => "OrganizationMerged",
+            OrganizationEvent::OrganizationStatusChanged(_) => "OrganizationStatusChanged",
             OrganizationEvent::DepartmentCreated(_) => "DepartmentCreated",
             OrganizationEvent::DepartmentUpdated(_) => "DepartmentUpdated",
             OrganizationEvent::DepartmentRestructured(_) => "DepartmentRestructured",
@@ -94,17 +86,10 @@ impl cim_domain::DomainEvent for OrganizationEvent {
             OrganizationEvent::TeamDisbanded(_) => "TeamDisbanded",
             OrganizationEvent::RoleCreated(_) => "RoleCreated",
             OrganizationEvent::RoleUpdated(_) => "RoleUpdated",
-            OrganizationEvent::RoleAssigned(_) => "RoleAssigned",
-            OrganizationEvent::RoleVacated(_) => "RoleVacated",
             OrganizationEvent::RoleDeprecated(_) => "RoleDeprecated",
-            OrganizationEvent::MemberAdded(_) => "MemberAdded",
-            OrganizationEvent::MemberRoleUpdated(_) => "MemberRoleUpdated",
-            OrganizationEvent::MemberRemoved(_) => "MemberRemoved",
-            OrganizationEvent::ReportingRelationshipChanged(_) => "ReportingRelationshipChanged",
-            OrganizationEvent::LocationAdded(_) => "LocationAdded",
-            OrganizationEvent::PrimaryLocationChanged(_) => "PrimaryLocationChanged",
-            OrganizationEvent::LocationRemoved(_) => "LocationRemoved",
-            OrganizationEvent::OrganizationStatusChanged(_) => "OrganizationStatusChanged",
+            OrganizationEvent::FacilityCreated(_) => "FacilityCreated",
+            OrganizationEvent::FacilityUpdated(_) => "FacilityUpdated",
+            OrganizationEvent::FacilityRemoved(_) => "FacilityRemoved",
             OrganizationEvent::ChildOrganizationAdded(_) => "ChildOrganizationAdded",
             OrganizationEvent::ChildOrganizationRemoved(_) => "ChildOrganizationRemoved",
         }
@@ -357,45 +342,6 @@ pub struct RoleChanges {
 
 
 
-/// Event: Role assigned to person
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RoleAssigned {
-    pub event_id: Uuid,
-    pub identity: MessageIdentity,
-    pub role_id: EntityId<Role>,
-    pub organization_id: EntityId<Organization>,
-    pub person_id: Uuid,  // Reference to person from cim-domain-person
-    pub effective_date: DateTime<Utc>,
-    pub occurred_at: DateTime<Utc>,
-}
-
-
-
-/// Event: Role vacated
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RoleVacated {
-    pub event_id: Uuid,
-    pub identity: MessageIdentity,
-    pub role_id: EntityId<Role>,
-    pub organization_id: EntityId<Organization>,
-    pub vacated_by: Uuid,  // Person who vacated
-    pub reason: VacationReason,
-    pub effective_date: DateTime<Utc>,
-    pub occurred_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum VacationReason {
-    Resignation,
-    Promotion,
-    Transfer,
-    Termination,
-    Retirement,
-    Other(String),
-}
-
-
-
 /// Event: Role deprecated
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoleDeprecated {
@@ -409,84 +355,57 @@ pub struct RoleDeprecated {
     pub occurred_at: DateTime<Utc>,
 }
 
-/// Event: Member added to organization
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemberAdded {
-    pub event_id: Uuid,
-    pub identity: MessageIdentity,
-    pub organization_id: EntityId<Organization>,
-    pub person_id: Uuid,
-    pub role: crate::aggregate::OrganizationRole,
-    pub department_id: Option<Uuid>,
-    pub occurred_at: DateTime<Utc>,
-}
 
-/// Event: Member role updated
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemberRoleUpdated {
-    pub event_id: Uuid,
-    pub identity: MessageIdentity,
-    pub organization_id: EntityId<Organization>,
-    pub person_id: Uuid,
-    pub new_role: crate::aggregate::OrganizationRole,
-    pub previous_role: crate::aggregate::OrganizationRole,
-    pub occurred_at: DateTime<Utc>,
-}
 
-/// Event: Member removed from organization
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemberRemoved {
-    pub event_id: Uuid,
-    pub identity: MessageIdentity,
-    pub organization_id: EntityId<Organization>,
-    pub person_id: Uuid,
-    pub reason: Option<String>,
-    pub occurred_at: DateTime<Utc>,
-}
+// Facility events - pure organizational places (no location/address data)
 
-/// Event: Reporting relationship changed
+/// Event: Facility created
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReportingRelationshipChanged {
+pub struct FacilityCreated {
     pub event_id: Uuid,
     pub identity: MessageIdentity,
+    pub facility_id: EntityId<Facility>,
     pub organization_id: EntityId<Organization>,
-    pub person_id: Uuid,
-    pub new_manager_id: Option<Uuid>,
-    pub previous_manager_id: Option<Uuid>,
-    pub occurred_at: DateTime<Utc>,
-}
-
-/// Event: Location added to organization
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LocationAdded {
-    pub event_id: Uuid,
-    pub identity: MessageIdentity,
-    pub organization_id: EntityId<Organization>,
-    pub location_id: Uuid,
     pub name: String,
-    pub address: String,
-    pub is_primary: bool,
+    pub code: String,
+    pub facility_type: FacilityType,
+    pub description: Option<String>,
     pub occurred_at: DateTime<Utc>,
 }
 
-/// Event: Primary location changed
+
+
+/// Event: Facility updated
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PrimaryLocationChanged {
+pub struct FacilityUpdated {
     pub event_id: Uuid,
     pub identity: MessageIdentity,
+    pub facility_id: EntityId<Facility>,
     pub organization_id: EntityId<Organization>,
-    pub new_primary_location_id: Uuid,
-    pub previous_primary_location_id: Option<Uuid>,
+    pub changes: FacilityChanges,
     pub occurred_at: DateTime<Utc>,
 }
 
-/// Event: Location removed from organization
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LocationRemoved {
+pub struct FacilityChanges {
+    pub name: Option<String>,
+    pub code: Option<String>,
+    pub description: Option<String>,
+    pub capacity: Option<u32>,
+    pub status: Option<FacilityStatus>,
+    pub parent_facility_id: Option<EntityId<Facility>>,
+}
+
+
+
+/// Event: Facility removed from organization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FacilityRemoved {
     pub event_id: Uuid,
     pub identity: MessageIdentity,
+    pub facility_id: EntityId<Facility>,
     pub organization_id: EntityId<Organization>,
-    pub location_id: Uuid,
+    pub reason: Option<String>,
     pub occurred_at: DateTime<Utc>,
 }
 

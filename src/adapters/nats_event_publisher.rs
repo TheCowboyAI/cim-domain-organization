@@ -62,12 +62,9 @@ impl EventPublisher for NatsEventPublisher {
 
         // Extract correlation ID for header
         let correlation_id = match event {
-            OrganizationEvent::MemberAdded(e) => &e.identity.correlation_id,
-            OrganizationEvent::MemberRoleUpdated(e) => &e.identity.correlation_id,
-            OrganizationEvent::MemberRemoved(e) => &e.identity.correlation_id,
-            OrganizationEvent::ReportingRelationshipChanged(e) => &e.identity.correlation_id,
             OrganizationEvent::OrganizationCreated(e) => &e.identity.correlation_id,
             OrganizationEvent::OrganizationUpdated(e) => &e.identity.correlation_id,
+            OrganizationEvent::OrganizationStatusChanged(e) => &e.identity.correlation_id,
             OrganizationEvent::OrganizationDissolved(e) => &e.identity.correlation_id,
             OrganizationEvent::OrganizationMerged(e) => &e.identity.correlation_id,
             OrganizationEvent::DepartmentCreated(e) => &e.identity.correlation_id,
@@ -79,13 +76,10 @@ impl EventPublisher for NatsEventPublisher {
             OrganizationEvent::TeamDisbanded(e) => &e.identity.correlation_id,
             OrganizationEvent::RoleCreated(e) => &e.identity.correlation_id,
             OrganizationEvent::RoleUpdated(e) => &e.identity.correlation_id,
-            OrganizationEvent::RoleAssigned(e) => &e.identity.correlation_id,
-            OrganizationEvent::RoleVacated(e) => &e.identity.correlation_id,
             OrganizationEvent::RoleDeprecated(e) => &e.identity.correlation_id,
-            OrganizationEvent::LocationAdded(e) => &e.identity.correlation_id,
-            OrganizationEvent::PrimaryLocationChanged(e) => &e.identity.correlation_id,
-            OrganizationEvent::LocationRemoved(e) => &e.identity.correlation_id,
-            OrganizationEvent::OrganizationStatusChanged(e) => &e.identity.correlation_id,
+            OrganizationEvent::FacilityCreated(e) => &e.identity.correlation_id,
+            OrganizationEvent::FacilityUpdated(e) => &e.identity.correlation_id,
+            OrganizationEvent::FacilityRemoved(e) => &e.identity.correlation_id,
             OrganizationEvent::ChildOrganizationAdded(e) => &e.identity.correlation_id,
             OrganizationEvent::ChildOrganizationRemoved(e) => &e.identity.correlation_id,
         };
@@ -237,17 +231,28 @@ impl EventPublisher for NatsEventPublisher {
                 .map_err(|e| QueryError::DeserializationError(e.to_string()))?;
 
             // Check timestamp
+            // NOTE: Most events have occurred_at, but some lifecycle events use effective_date
             let event_time = match &event {
-                OrganizationEvent::MemberAdded(e) => e.occurred_at,
-                OrganizationEvent::MemberRoleUpdated(e) => e.occurred_at,
-                OrganizationEvent::MemberRemoved(e) => e.occurred_at,
-                OrganizationEvent::OrganizationCreated(e) => e.occurred_at,
-                OrganizationEvent::OrganizationUpdated(e) => e.occurred_at,
                 OrganizationEvent::OrganizationDissolved(e) => e.effective_date,
                 OrganizationEvent::OrganizationMerged(e) => e.effective_date,
+                OrganizationEvent::OrganizationCreated(e) => e.occurred_at,
+                OrganizationEvent::OrganizationUpdated(e) => e.occurred_at,
+                OrganizationEvent::OrganizationStatusChanged(e) => e.occurred_at,
                 OrganizationEvent::DepartmentCreated(e) => e.occurred_at,
-                OrganizationEvent::LocationAdded(e) => e.occurred_at,
-                _ => chrono::Utc::now(), // Fallback
+                OrganizationEvent::DepartmentUpdated(e) => e.occurred_at,
+                OrganizationEvent::DepartmentRestructured(e) => e.occurred_at,
+                OrganizationEvent::DepartmentDissolved(e) => e.occurred_at,
+                OrganizationEvent::TeamFormed(e) => e.occurred_at,
+                OrganizationEvent::TeamUpdated(e) => e.occurred_at,
+                OrganizationEvent::TeamDisbanded(e) => e.occurred_at,
+                OrganizationEvent::RoleCreated(e) => e.occurred_at,
+                OrganizationEvent::RoleUpdated(e) => e.occurred_at,
+                OrganizationEvent::RoleDeprecated(e) => e.effective_date,
+                OrganizationEvent::FacilityCreated(e) => e.occurred_at,
+                OrganizationEvent::FacilityUpdated(e) => e.occurred_at,
+                OrganizationEvent::FacilityRemoved(e) => e.occurred_at,
+                OrganizationEvent::ChildOrganizationAdded(e) => e.occurred_at,
+                OrganizationEvent::ChildOrganizationRemoved(e) => e.occurred_at,
             };
 
             if event_time >= start && event_time <= end {
