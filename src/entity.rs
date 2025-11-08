@@ -181,6 +181,56 @@ pub enum RoleStatus {
     Frozen,
 }
 
+/// Facility entity - an organizational place (office, warehouse, etc.)
+/// NOTE: This does NOT contain location address data - that's in the Location domain
+/// The facility is linked to a Location via a separate relationship/association
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct Facility {
+    pub id: EntityId<Facility>,
+    pub organization_id: EntityId<Organization>,
+    pub name: String,
+    pub code: String,
+    pub facility_type: FacilityType,
+    pub description: Option<String>,
+    pub capacity: Option<u32>,
+    pub status: FacilityStatus,
+    pub parent_facility_id: Option<EntityId<Facility>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl DomainEntity for Facility {
+    type IdType = Facility;
+
+    fn id(&self) -> EntityId<Self::IdType> {
+        self.id.clone()
+    }
+}
+
+/// Facility types
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum FacilityType {
+    Headquarters,
+    Office,
+    Warehouse,
+    Factory,
+    RetailStore,
+    DataCenter,
+    Laboratory,
+    ServiceCenter,
+    Other(String),
+}
+
+/// Facility status
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum FacilityStatus {
+    Active,
+    UnderConstruction,
+    Renovating,
+    Inactive,
+    Closed,
+}
+
 /// Organizational Unit - generic container for organizational structures
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct OrganizationUnit {
@@ -364,6 +414,30 @@ impl Role {
             permissions: Vec::new(),
             responsibilities: Vec::new(),
             status: RoleStatus::Active,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+impl Facility {
+    pub fn new(
+        organization_id: EntityId<Organization>,
+        name: String,
+        code: String,
+        facility_type: FacilityType,
+    ) -> Self {
+        let now = Utc::now();
+        Self {
+            id: EntityId::new(),
+            organization_id,
+            name,
+            code,
+            facility_type,
+            description: None,
+            capacity: None,
+            status: FacilityStatus::Active,
+            parent_facility_id: None,
             created_at: now,
             updated_at: now,
         }

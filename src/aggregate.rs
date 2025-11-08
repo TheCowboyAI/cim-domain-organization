@@ -54,19 +54,21 @@ impl From<OrganizationStatus> for OrganizationState {
 ///
 /// Manages the consistency boundary for organization operations
 /// The Organization entity is the aggregate root
+///
+/// NOTE: This aggregate only contains pure organization domain concepts.
+/// Relationships to people and locations are managed in separate domains.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrganizationAggregate {
     pub id: Uuid,
     pub name: String,
     pub org_type: OrganizationType,
     pub status: OrganizationStatus,
-    pub members: HashMap<Uuid, OrganizationMember>,
-    pub locations: HashMap<Uuid, OrganizationLocation>,
     pub child_organizations: HashMap<Uuid, ChildOrganization>,
     pub organization: Option<Organization>,  // The root entity
     pub departments: HashMap<EntityId<Department>, Department>,
     pub teams: HashMap<EntityId<Team>, Team>,
     pub roles: HashMap<EntityId<Role>, Role>,
+    pub facilities: HashMap<EntityId<Facility>, Facility>,
     pub version: u64,
 }
 
@@ -79,158 +81,23 @@ pub struct ChildOrganization {
     pub added_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// Organization member
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OrganizationMember {
-    pub id: Uuid,
-    pub person_id: Uuid,
-    pub role: OrganizationRole,
-    pub department_id: Option<Uuid>,
-    pub joined_at: chrono::DateTime<chrono::Utc>,
-}
-
-/// Organization role
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OrganizationRole {
-    pub title: String,
-    pub level: RoleLevel,
-    pub reports_to: Option<Uuid>,
-}
-
-impl OrganizationRole {
-    pub fn ceo() -> Self {
-        Self {
-            title: "CEO".to_string(),
-            level: RoleLevel::Executive,
-            reports_to: None,
-        }
-    }
-
-    pub fn software_engineer() -> Self {
-        Self {
-            title: "Software Engineer".to_string(),
-            level: RoleLevel::Mid,
-            reports_to: None,
-        }
-    }
-
-    pub fn manager() -> Self {
-        Self {
-            title: "Manager".to_string(),
-            level: RoleLevel::Senior,
-            reports_to: None,
-        }
-    }
-
-    pub fn director() -> Self {
-        Self {
-            title: "Director".to_string(),
-            level: RoleLevel::Executive,
-            reports_to: None,
-        }
-    }
-
-    pub fn engineering_manager() -> Self {
-        Self {
-            title: "Engineering Manager".to_string(),
-            level: RoleLevel::Senior,
-            reports_to: None,
-        }
-    }
-
-    /// Check if this role has a specific permission
-    pub fn has_permission(&self, permission: &Permission) -> bool {
-        match self.level {
-            RoleLevel::Executive => true, // Executives have all permissions
-            RoleLevel::Senior => match permission {
-                Permission::CreateOrganization => false,
-                Permission::DeleteOrganization => false,
-                Permission::ViewOrganization => true,
-                Permission::ApproveBudget => true,
-                Permission::HireEmployees => true,
-                Permission::ManageTeam => true,
-                Permission::DevelopSoftware => true,
-                Permission::ViewReports => true,
-                Permission::AddMember => true,
-                Permission::UpdateMemberRole => true,
-                Permission::RemoveMember => false,
-            },
-            RoleLevel::Mid => match permission {
-                Permission::CreateOrganization => false,
-                Permission::DeleteOrganization => false,
-                Permission::ViewOrganization => true,
-                Permission::ApproveBudget => false,
-                Permission::HireEmployees => false,
-                Permission::ManageTeam => true,
-                Permission::DevelopSoftware => true,
-                Permission::ViewReports => true,
-                Permission::AddMember => false,
-                Permission::UpdateMemberRole => false,
-                Permission::RemoveMember => false,
-            },
-            RoleLevel::Junior => match permission {
-                Permission::CreateOrganization => false,
-                Permission::DeleteOrganization => false,
-                Permission::ViewOrganization => true,
-                Permission::ApproveBudget => false,
-                Permission::HireEmployees => false,
-                Permission::ManageTeam => false,
-                Permission::DevelopSoftware => true,
-                Permission::ViewReports => true,
-                Permission::AddMember => false,
-                Permission::UpdateMemberRole => false,
-                Permission::RemoveMember => false,
-            },
-            RoleLevel::Intern => match permission {
-                Permission::CreateOrganization => false,
-                Permission::DeleteOrganization => false,
-                Permission::ViewOrganization => true,
-                Permission::ApproveBudget => false,
-                Permission::HireEmployees => false,
-                Permission::ManageTeam => false,
-                Permission::DevelopSoftware => true,
-                Permission::ViewReports => false,
-                Permission::AddMember => false,
-                Permission::UpdateMemberRole => false,
-                Permission::RemoveMember => false,
-            },
-        }
-    }
-}
-
-/// Role level
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum RoleLevel {
-    Executive,
-    Senior,
-    Mid,
-    Junior,
-    Intern,
-}
-
-/// Permissions that can be assigned to roles
-#[derive(Debug, Clone, PartialEq)]
+/// Permissions that can be assigned to roles (organization domain)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Permission {
     CreateOrganization,
     DeleteOrganization,
+    ModifyOrganization,
     ViewOrganization,
     ApproveBudget,
-    HireEmployees,
+    ManageDepartment,
     ManageTeam,
-    DevelopSoftware,
+    CreateRole,
+    ModifyRole,
+    CreateFacility,
+    ModifyFacility,
     ViewReports,
-    AddMember,
-    UpdateMemberRole,
-    RemoveMember,
-}
-
-/// Organization location
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OrganizationLocation {
-    pub id: Uuid,
-    pub name: String,
-    pub address: String,
-    pub is_primary: bool,
+    // NOTE: Person assignment permissions are in the Association domain
+    // NOT here - Organization domain doesn't manage people
 }
 
 impl OrganizationAggregate {
@@ -241,13 +108,12 @@ impl OrganizationAggregate {
             name: String::new(),
             org_type: OrganizationType::Corporation,
             status: OrganizationStatus::Pending,
-            members: HashMap::new(),
-            locations: HashMap::new(),
             child_organizations: HashMap::new(),
             organization: None,
             departments: HashMap::new(),
             teams: HashMap::new(),
             roles: HashMap::new(),
+            facilities: HashMap::new(),
             version: 0,
         }
     }
@@ -273,13 +139,12 @@ impl OrganizationAggregate {
             name,
             org_type,
             status: OrganizationStatus::Pending,
-            members: HashMap::new(),
-            locations: HashMap::new(),
             child_organizations: HashMap::new(),
             organization: Some(org),
             departments: HashMap::new(),
             teams: HashMap::new(),
             roles: HashMap::new(),
+            facilities: HashMap::new(),
             version: 0,
         }
     }
@@ -291,13 +156,12 @@ impl OrganizationAggregate {
             name: org.name.clone(),
             org_type: org.organization_type.clone(),
             status: org.status.clone(),
-            members: HashMap::new(),
-            locations: HashMap::new(),
             child_organizations: HashMap::new(),
             organization: Some(org),
             departments: HashMap::new(),
             teams: HashMap::new(),
             roles: HashMap::new(),
+            facilities: HashMap::new(),
             version: 0,
         }
     }

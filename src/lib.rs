@@ -13,22 +13,27 @@ pub mod adapters;
 pub mod infrastructure;
 
 // Re-export main types
-pub use entity::{Organization, Department, Team, Role, OrganizationUnit, OrganizationType, OrganizationStatus};
+pub use entity::{
+    Organization, Department, Team, Role, Facility,
+    OrganizationType, OrganizationStatus,
+    OrganizationUnit, FacilityType, FacilityStatus,
+    RoleType, RoleStatus, DepartmentStatus, TeamStatus, TeamType
+};
 pub use aggregate::{
-    OrganizationAggregate, OrganizationMember, OrganizationRole, RoleLevel,
-    OrganizationLocation, Permission, OrganizationState
+    OrganizationAggregate, Permission, OrganizationState
 };
 pub use events::{
-    OrganizationEvent, OrganizationCreated, DepartmentCreated, TeamFormed,
-    MemberAdded, MemberRoleUpdated, MemberRemoved, ReportingRelationshipChanged,
-    LocationAdded, PrimaryLocationChanged, LocationRemoved, OrganizationStatusChanged
+    OrganizationEvent, OrganizationCreated, OrganizationUpdated,
+    DepartmentCreated, TeamFormed, RoleCreated,
+    FacilityCreated, FacilityUpdated, FacilityRemoved,
+    OrganizationStatusChanged, OrganizationDissolved, OrganizationMerged,
+    ChildOrganizationAdded, ChildOrganizationRemoved
 };
 pub use commands::{
-    OrganizationCommand, CreateOrganization, CreateDepartment, CreateTeam,
-    AddMember, UpdateMemberRole, RemoveMember, ChangeReportingRelationship,
-    AddLocation, ChangePrimaryLocation, RemoveLocation,
+    OrganizationCommand, CreateOrganization, UpdateOrganization,
+    CreateDepartment, CreateTeam, CreateRole, CreateFacility,
     AddChildOrganization, RemoveChildOrganization, ChangeOrganizationStatus,
-    DissolveOrganization, MergeOrganizations, UpdateOrganization
+    DissolveOrganization, MergeOrganizations
 };
 pub use cim_domain::{EntityId, MessageIdentity};
 
